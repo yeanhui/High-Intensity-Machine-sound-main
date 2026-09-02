@@ -23,7 +23,8 @@ gate) like that reference project.
 
 ## 🚀 Try it live
 
-**Live Space:** <https://huggingface.co/spaces/yeanhui/HighIntensityMachine>
+**Live Space:** [Factory Sound Event Classifier](https://yeanhui-highintensitymachine.static.hf.space/index.html)
+(also viewable, embedded, at <https://huggingface.co/spaces/yeanhui/HighIntensityMachine>)
 
 Click **Start microphone** and allow browser access, or use the **Upload / Demo** tab (with a
 bundled synthetic motor-hum clip) if you have no microphone or the browser blocks access.

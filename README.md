@@ -14,8 +14,8 @@ short_description: Factory machine sound frequency monitor and recorder
 
 > **This folder is reference/study material only and is not auto-deployed from this repo.**
 > The live submission for this assignment is the in-browser ML audio classifier in
-> [`new-solution/`](new-solution/README.md), deployed to
-> <https://huggingface.co/spaces/yeanhui/HighIntensityMachine>.
+> [`new-solution/`](new-solution/README.md), deployed as
+> [Factory Sound Event Classifier](https://yeanhui-highintensitymachine.static.hf.space/index.html).
 
 A browser-based prototype for **recording and visualizing machine sound frequencies** in an
 electronics-manufacturing environment, inspired by spectral "acoustic manifold" visualizations
@@ -129,7 +129,8 @@ This project (`app.html`, `monitor.py`, `index.html` at the repo root) is kept *
 reference/study material** for the `myTask.md` assignment and is **not** deployed by this
 repo's CI/CD anymore — only [`new-solution/`](new-solution/README.md) auto-deploys, via
 [`.github/workflows/deploy-new-solution.yml`](.github/workflows/deploy-new-solution.yml), to
-<https://huggingface.co/spaces/yeanhui/HighIntensityMachine>.
+[Factory Sound Event Classifier](https://yeanhui-highintensitymachine.static.hf.space/index.html)
+(also viewable, embedded, at <https://huggingface.co/spaces/yeanhui/HighIntensityMachine>).
 
 The original author's own live copy of this reference project remains at
 <https://huggingface.co/spaces/YianXingJian/HighIntensityMachine> (a separate Hugging Face
