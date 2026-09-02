@@ -1,0 +1,93 @@
+name: Deploy new-solution to Hugging Face Space
+
+# Deploys the self-contained new-solution/ folder (static in-browser audio classifier) to
+# its own Hugging Face Space, on every push to main that touches new-solution/**.
+#
+# One-time setup required:
+#   1. Create a Static Space at https://huggingface.co/new-space under HF_USER,
+#      named HF_SPACE (below).
+#   2. Create a Hugging Face access token with WRITE permission:
+#      https://huggingface.co/settings/tokens
+#   3. In this GitHub repo: Settings -> Secrets and variables -> Actions
+#      -> New repository secret, name it HF_TOKEN, paste the token.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "new-solution/**"
+      - ".github/workflows/deploy-new-solution.yml"
+  workflow_dispatch:
+
+env:
+  HF_USER: yeanhui
+  HF_SPACE: HighIntensityMachine
+
+jobs:
+  verify:
+    name: Verify environment and app readiness
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: new-solution
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check required files exist
+        run: |
+          for f in index.html README.md; do
+            [ -f "$f" ] || { echo "::error::Missing required file: $f"; exit 1; }
+          done
+          echo "All required files present."
+
+      - name: Check Space config in README front matter
+        run: |
+          head -20 README.md | grep -q "sdk: static"        || { echo "::error::README.md missing 'sdk: static' front matter"; exit 1; }
+          head -20 README.md | grep -q "app_file: index.html" || { echo "::error::README.md missing 'app_file: index.html'"; exit 1; }
+          echo "Hugging Face Space config OK."
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Sanity-check index.html (Python-run checks, no Python deps needed by the app itself)
+        run: |
+          python -c "
+          import sys
+          html = open('index.html', encoding='utf-8').read()
+          required = ['getUserMedia', 'transformers', 'micBtn', 'demoBtn', 'exportBtn', 'Xenova/ast-finetuned-audioset']
+          missing = [r for r in required if r not in html]
+          if missing:
+              print(f'::error::index.html missing expected markers: {missing}')
+              sys.exit(1)
+          print('index.html sanity checks OK.')
+          "
+
+  deploy:
+    name: Push new-solution/ to Hugging Face Space
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Deploy
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::error::HF_TOKEN secret is not set. Add it in Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          rm -rf /tmp/space-deploy
+          mkdir -p /tmp/space-deploy
+          cp -r new-solution/. /tmp/space-deploy/
+          cd /tmp/space-deploy
+          git init -b main
+          git -c user.name="github-actions" -c user.email="actions@github.com" add -A
+          git -c user.name="github-actions" -c user.email="actions@github.com" \
+            commit -m "Deploy $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push --force \
+            "https://${HF_USER}:${HF_TOKEN}@huggingface.co/spaces/${HF_USER}/${HF_SPACE}" \
+            HEAD:main
+          echo "Deployed to https://huggingface.co/spaces/${HF_USER}/${HF_SPACE}"

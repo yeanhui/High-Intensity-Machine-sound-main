@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Factory Acoustic Monitor — Machine Sound Frequency Recorder</title>
+<style>
+  :root{
+    --bg:#3a3a3c; --panel:#2c2c2e; --panel2:#242426; --ink:#f2f2f4; --dim:#9a9aa0;
+    --accent:#ffd166; --ok:#4cd964; --warn:#ff9f0a; --bad:#ff453a; --line:#4a4a4e;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overflow-x:hidden}
+  header{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:14px 18px;background:var(--panel);border-bottom:1px solid var(--line)}
+  header h1{font-size:16px;letter-spacing:2px;font-weight:600;text-transform:uppercase}
+  header .sub{font-size:11px;color:var(--dim);letter-spacing:1px}
+  .btn{background:var(--btn,#48484c);border:1px solid var(--line);color:var(--ink);padding:8px 16px;border-radius:20px;cursor:pointer;font-size:13px;transition:all .15s}
+  .btn:hover{background:var(--btnh,#5a5a5e)}
+  .btn.primary{background:var(--accent);color:#222;font-weight:600;border-color:var(--accent)}
+  .btn.rec{background:var(--bad);border-color:var(--bad);font-weight:600}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .status{margin-left:auto;display:flex;gap:16px;align-items:center;font-size:12px;color:var(--dim)}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#666;margin-right:5px;vertical-align:middle}
+  .dot.live{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .dot.reclive{background:var(--bad);box-shadow:0 0 8px var(--bad);animation:blink 1s infinite}
+  @keyframes blink{50%{opacity:.3}}
+  main{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto auto;gap:10px;padding:10px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;position:relative;min-width:0}
+  .card h2{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);padding:10px 14px 6px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .help{background:var(--btn,#48484c);border:1px solid var(--line);color:var(--accent);width:18px;height:18px;border-radius:50%;cursor:pointer;font-size:11px;font-weight:700;line-height:1;flex:none}
+  .help:hover{background:var(--accent);color:#222}
+  #modalOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:50;align-items:center;justify-content:center;padding:20px}
+  #modalOverlay.open{display:flex}
+  #modalBox{background:var(--panel);border:1px solid var(--line);border-radius:12px;max-width:680px;max-height:82vh;overflow-y:auto;padding:22px 26px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  #modalBox h3{font-size:14px;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+  #modalBox h4{font-size:12px;color:var(--ink);margin:14px 0 4px}
+  #modalBox p,#modalBox li{font-size:13px;line-height:1.65;color:#d4d4d8}
+  #modalBox ul{padding-left:20px;margin:6px 0}
+  #modalBox b{color:var(--accent)}
+  #modalBox .close{float:right;background:var(--btn,#48484c);border:1px solid var(--line);color:var(--ink);border-radius:16px;padding:4px 14px;cursor:pointer;font-size:12px}
+  #modalBox .close:hover{background:#5a5a5e}
+  .card canvas{display:block;width:100%}
+  #manifoldCard{grid-column:1 / -1}
+  .legend{position:absolute;left:14px;top:44px;font-size:9px;color:var(--dim);letter-spacing:1px}
+  .legend .bar{width:14px;height:180px;border-radius:3px;margin:4px 0}
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;padding:12px 14px}
+  .metric{background:var(--panel2);border-radius:8px;padding:10px}
+  .metric .k{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--dim)}
+  .metric .v{font-size:20px;font-weight:600;margin-top:2px}
+  .metric .u{font-size:11px;color:var(--dim)}
+  .metric .spark{width:100%;height:34px;display:block;margin-top:6px}
+  #alertBanner{display:none;grid-column:1/-1;background:#5e1a16;border:1px solid var(--bad);color:#ffd7d4;padding:10px 16px;border-radius:10px;font-size:13px}
+  #log{max-height:160px;overflow-y:auto;font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--dim);padding:0 14px 12px;line-height:1.7}
+  footer{padding:10px 18px;font-size:11px;color:var(--dim)}
+  #fab{display:none;position:fixed;right:16px;bottom:16px;width:62px;height:62px;border-radius:50%;
+       border:none;cursor:pointer;z-index:40;font-size:26px;line-height:1;
+       align-items:center;justify-content:center;background:var(--accent);color:#222;
+       box-shadow:0 6px 18px rgba(0,0,0,.55)}
+  #fab.stop{background:var(--bad);color:#fff;font-size:22px}
+  #fab:active{transform:scale(.92)}
+  @media(max-width:900px){main{grid-template-columns:1fr}#fab{display:flex}}
+  @media(max-width:700px){
+    header{padding:8px 10px;gap:6px}
+    header h1{font-size:13px;letter-spacing:1px}
+    header .sub{font-size:9px}
+    .btn{padding:6px 10px;font-size:12px;border-radius:14px}
+    .status{margin-left:0;width:100%;gap:12px;font-size:11px}
+    main{gap:8px;padding:8px}
+    .card h2{font-size:10px;letter-spacing:1px;padding:8px 10px 4px}
+    .legend{left:8px;top:36px;font-size:8px}
+    .legend .bar{height:110px;width:10px}
+    .metrics{grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;padding:8px 10px}
+    .metric{padding:7px}
+    .metric .v{font-size:16px}
+    .metric .k{font-size:9px}
+    .metric .u{font-size:10px}
+    #log{max-height:100px;font-size:10px}
+    #modalBox{padding:16px;max-height:88vh}
+    footer{font-size:10px;padding:8px 10px}
+  }
+  .btn.mini{padding:4px 10px;font-size:11px}
+  #spikeCard{grid-column:1/-1}
+  #spikeCard h2 .spacer{margin-left:auto;display:flex;gap:6px}
+  #spikeEmpty{padding:6px 14px 14px;font-size:12px;color:var(--dim)}
+  #spikeList{max-height:180px;overflow-y:auto;padding:0 14px 12px}
+  #spikeList table{width:100%;border-collapse:collapse;font-size:12px}
+  #spikeList th{color:var(--dim);text-transform:uppercase;font-size:10px;letter-spacing:1px;text-align:left;padding:4px 8px;border-bottom:1px solid var(--line)}
+  #spikeList td{padding:5px 8px;border-bottom:1px solid var(--line)}
+  #spikeList td.voice{color:#ff9f0a;font-weight:600}
+  #spikeList td.machine{color:#ff453a;font-weight:600}
+  #spikeAlert{position:fixed;top:14px;left:50%;transform:translate(-50%,-250%);background:#b71c1c;border:1px solid #ff6659;color:#fff;
+    padding:14px 26px;border-radius:12px;font-weight:600;font-size:14px;z-index:60;max-width:92vw;text-align:center;
+    box-shadow:0 10px 36px rgba(255,40,40,.45);transition:transform .25s ease}
+  #spikeAlert.show{transform:translate(-50%,0)}
+  body.light{--bg:#eef0f3;--panel:#ffffff;--panel2:#f1f2f5;--ink:#17171a;--dim:#5c5c66;
+    --line:#d9dade;--btn:#e5e6ea;--btnh:#d5d6da}
+  body.light .btn.primary{background:var(--accent);color:#222}
+  body.light #log{color:#4c4c56}
+  @media(max-height:820px){footer{display:none}#log{max-height:60px}.metric{padding:6px}.metric .v{font-size:16px}.metrics{gap:6px;padding:8px 12px}}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Acoustic Manifold — Factory Edition</h1>
+    <div class="sub">MACHINE SOUND FREQUENCY MONITOR &amp; RECORDER</div>
+  </div>
+  <button class="btn primary" id="btnStart">▶ Start microphone</button>
+  <button class="btn" id="btnDemo">Demo machine sound</button>
+  <button class="btn" id="btnRec" disabled>● Record</button>
+  <button class="btn" id="btnBaseline" disabled>Set healthy baseline</button>
+  <button class="btn" id="btnCsv" disabled>⬇ Export CSV</button>
+  <button class="btn" id="btnRotate" title="Rotate the 3D bubble field for depth separation">🔄 3D rotate: off</button>
+  <button class="btn" id="btnReplay" title="Load an hourly log file and replay it through the charts">📼 Replay log</button>
+  <button class="btn" id="btnTheme" title="Switch between dark and light mode">🌓 Light mode</button>
+  <input type="file" id="replayFile" accept=".json,application/json" style="display:none">
+  <div class="status">
+    <span><span class="dot" id="dotLive"></span>INPUT</span>
+    <span><span class="dot" id="dotRec"></span>REC</span>
+    <span id="clock">00:00</span>
+  </div>
+</header>
+
+<main>
+  <div id="alertBanner"></div>
+
+  <div class="card" id="manifoldCard">
+    <h2>Machine fault diagnosis space (X = dominant Hz · Y = brightness · Z = impacts · size = energy) <button class="help" data-help="manifold" title="What is this chart?">?</button></h2>
+    <canvas id="manifold" height="380" data-vh="0.27"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Live spectrum (FFT) <button class="help" data-help="spectrum" title="What is this chart?">?</button></h2>
+    <canvas id="spectrum" height="220" data-vh="0.20"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Spectrogram — frequency over time <button class="help" data-help="spectrogram" title="What is this chart?">?</button></h2>
+    <canvas id="spectrogram" height="220" data-vh="0.20"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Multi-scale analysis — acoustic signature <button class="help" data-help="radar" title="What is this chart?">?</button></h2>
+    <canvas id="radar" height="260" data-vh="0.24"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Captured metrics <button class="help" data-help="metrics" title="What is this chart?">?</button></h2>
+    <div class="metrics">
+      <div class="metric"><div class="k">Level</div><div class="v" id="mDb">–</div><div class="u">dBFS</div><canvas class="spark"></canvas></div>
+      <div class="metric"><div class="k">Dominant freq</div><div class="v" id="mPeak">–</div><div class="u">Hz</div><canvas class="spark"></canvas></div>
+      <div class="metric"><div class="k">Spectral centroid</div><div class="v" id="mCentroid">–</div><div class="u">Hz</div><canvas class="spark"></canvas></div>
+      <div class="metric"><div class="k">Spectral spread</div><div class="v" id="mSpread">–</div><div class="u">Hz</div><canvas class="spark"></canvas></div>
+      <div class="metric"><div class="k">Tonality (flatness)</div><div class="v" id="mFlat">–</div><div class="u">0=tonal · 1=noise</div><canvas class="spark"></canvas></div>
+      <div class="metric"><div class="k">Crest factor</div><div class="v" id="mCrest">–</div><div class="u">peak/RMS</div><canvas class="spark"></canvas></div>
+      <div class="metric"><div class="k">Rolloff 85%</div><div class="v" id="mRoll">–</div><div class="u">Hz</div><canvas class="spark"></canvas></div>
+      <div class="metric"><div class="k">Baseline deviation</div><div class="v" id="mDev">–</div><div class="u">%</div><canvas class="spark"></canvas></div>
+    </div>
+    <h2>Event log</h2>
+    <div id="log"></div>
+  </div>
+
+  <div class="card" id="spikeCard">
+    <h2>Spike / burst event history <button class="help" data-help="spikes" title="How are spikes detected?">?</button>
+      <span class="spacer">
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--dim);text-transform:none;letter-spacing:0">Sensitivity
+          <select id="sensSel" class="btn mini" style="cursor:pointer">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select></label>
+        <button class="btn mini" id="btnSpikeCsv">⬇ Events CSV</button>
+        <button class="btn mini" id="btnSpikeClear">Clear</button>
+      </span>
+    </h2>
+    <div id="spikeEmpty">No spike events yet. Monitoring: 3.5–8 kHz voice burst (scream / glass) and 8–20 kHz machine anomaly (bearing / crack). Events are kept in this browser between sessions.</div>
+    <div id="spikeList"></div>
+  </div>
+
+  <div id="modalOverlay">
+    <div id="modalBox">
+      <button class="close" onclick="document.getElementById('modalOverlay').classList.remove('open')">✕ Close</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+</main>
+
+<button id="fab" title="Start / stop microphone">🎤</button>
+
+<div id="spikeAlert"></div>
+
+<footer>
+  Prototype — browser-based acoustic monitoring for electronics manufacturing. All processing is local (Web Audio API); no data leaves this device.
+  Recording exports a WAV file; Export CSV downloads the per-frame feature log for analysis / ML training.
+</footer>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- state ---------- */
+let audioCtx=null, analyser=null, srcNode=null, demoNodes=null, mediaStream=null;
+let running=false, recording=false, recorder=null, recChunks=[];
+let paused=false, lastF=null, loopStarted=false;
+let demoTimers=null;
+let startTime=0, frameCount=0;
+let baseline=null;                 // saved healthy spectrum
+const featureLog=[];               // rows for CSV export
+const trail=[];                    // manifold points
+const MAX_TRAIL=900;
+const FFT_SIZE=4096;
+
+/* ---------- dom ---------- */
+const $=id=>document.getElementById(id);
+const cvManifold=$("manifold"), cvSpec=$("spectrum"), cvGram=$("spectrogram"), cvRadar=$("radar");
+const log=(msg,cls)=>{const d=$("log");const t=new Date().toLocaleTimeString();
+  d.insertAdjacentHTML("afterbegin",`<div>[${t}] ${msg}</div>`);};
+
+function spreadColor(t){ // t 0..1
+  t=Math.min(1,Math.max(0,t));
+  const stops=[[58,58,255],[176,64,208],[255,64,64],[255,208,32]];
+  const x=t*(stops.length-1), i=Math.min(stops.length-2,Math.floor(x)), f=x-i;
+  const c=stops[i].map((v,k)=>Math.round(v+(stops[i+1][k]-v)*f));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+function ampColor(t){ // amplitude: blue→red→gold
+  return spreadColor(t);
+}
+
+/* ---------- resize canvases for DPR (stable under browser zoom) ---------- */
+function fit(cv){
+  // Cache the design height on first use: assigning cv.height below rewrites the
+  // height attribute, so re-reading it would compound by devicePixelRatio each
+  // resize and make the page grow forever on scaled/zoomed displays.
+  if(!cv.dataset.designH) cv.dataset.designH=cv.getAttribute("height");
+  const maxH=parseInt(cv.dataset.designH);
+  const frac=parseFloat(cv.dataset.vh||"0");       // viewport-height share for this chart
+  // Scale chart height to the viewport (never above the design height) so the
+  // whole dashboard fits a laptop screen and stays compact on phones.
+  const hCss=frac?Math.round(Math.min(maxH,Math.max(140,window.innerHeight*frac))):maxH;
+  cv.style.height=hCss+"px";                       // lock CSS height so zoom keeps aspect
+  const r=cv.getBoundingClientRect();
+  cv.width=Math.max(80,Math.round(r.width*devicePixelRatio));
+  cv.height=Math.round(hCss*devicePixelRatio);
+}
+let fitTimer=null;
+function fitAll(){[cvManifold,cvSpec,cvGram,cvRadar].forEach(fit);gramInit=false;}
+function fitSoon(){clearTimeout(fitTimer);fitTimer=setTimeout(fitAll,120);}
+window.addEventListener("resize",fitSoon);
+new ResizeObserver(fitSoon).observe(document.body);
+
+/* ---------- audio setup ---------- */
+async function startMic(){
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    initAudio(ctx=>ctx.createMediaStreamSource(stream));
+    mediaStream=stream;
+    log("Microphone input started.");
+  }catch(e){
+    setRunningUI(false);
+    log("Microphone unavailable ("+e.message+"). Try the demo instead.");
+    alert("Could not access microphone: "+e.message+"\nUse 'Demo machine sound' to try the interface.");
+  }
+}
+
+/* synthesized "machine" for demo: motor hum + harmonics + broadband hiss + periodic impact */
+function startDemo(){
+  initAudio(ctx=>{
+    const g=ctx.createGain(); g.gain.value=.6;
+    const hum=ctx.createOscillator(); hum.type="sawtooth"; hum.frequency.value=120;
+    const hg=ctx.createGain(); hg.gain.value=.25; hum.connect(hg).connect(g);
+    const h2=ctx.createOscillator(); h2.type="sine"; h2.frequency.value=2400;
+    const h2g=ctx.createGain(); h2g.gain.value=.06; h2.connect(h2g).connect(g);
+    const noiseBuf=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);
+    const nd=noiseBuf.getChannelData(0); for(let i=0;i<nd.length;i++) nd[i]=Math.random()*2-1;
+    const noise=ctx.createBufferSource(); noise.buffer=noiseBuf; noise.loop=true;
+    const nf=ctx.createBiquadFilter(); nf.type="bandpass"; nf.frequency.value=3000; nf.Q.value=.5;
+    const ng=ctx.createGain(); ng.gain.value=.12; noise.connect(nf).connect(ng).connect(g);
+    const lfo=ctx.createOscillator(); lfo.frequency.value=.2;
+    const lg=ctx.createGain(); lg.gain.value=800; lfo.connect(lg).connect(nf.frequency);
+    hum.start(); h2.start(); noise.start(); lfo.start();
+    // periodic press "impact"
+    const impact=()=>{ if(!running) return;
+      const o=ctx.createOscillator(); o.type="square"; o.frequency.value=700;
+      const og=ctx.createGain(); og.gain.setValueAtTime(.5,ctx.currentTime);
+      og.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.15);
+      o.connect(og).connect(g); o.start(); o.stop(ctx.currentTime+.2);
+      setTimeout(impact,2500+Math.random()*1500); };
+    setTimeout(impact,1500);
+    demoNodes=[hum,h2,noise,lfo];
+    /* 30-second variance cycle: normal -> quiet idle -> voice-band scream burst ->
+       normal+impacts -> high-frequency screech -> heavy rumble -> repeat */
+    demoTimers=[];
+    const burst=(freq,dur,gain,type)=>{ if(!running) return;
+      window.__lastBurst={at:ctx.currentTime,freq,gain,master:g.gain.value};
+      const o=ctx.createOscillator(); o.type=type||"sawtooth"; o.frequency.value=freq;
+      const og=ctx.createGain(); og.gain.setValueAtTime(0.0001,ctx.currentTime);
+      og.gain.exponentialRampToValueAtTime(gain,ctx.currentTime+0.05);
+      og.gain.setValueAtTime(gain,ctx.currentTime+dur*0.7);
+      og.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+dur);
+      o.connect(og).connect(g); o.start(); o.stop(ctx.currentTime+dur+0.1); };
+    const cycle=()=>{ if(!running) return;
+      g.gain.setValueAtTime(.6,ctx.currentTime);
+      demoTimers.push(setTimeout(()=>{if(running)g.gain.linearRampToValueAtTime(.12,ctx.currentTime+1);},8000));
+      demoTimers.push(setTimeout(()=>{if(running)g.gain.linearRampToValueAtTime(.6,ctx.currentTime+.4);},10600));
+      demoTimers.push(setTimeout(()=>burst(5200,1.4,2.4,"sawtooth"),12000));   // scream (voice band)
+      demoTimers.push(setTimeout(()=>burst(9800,2.2,2.4,"square"),20000));     // bearing screech (8-20 kHz)
+      demoTimers.push(setTimeout(()=>burst(55,3.5,1.2,"sine"),24000));         // heavy rumble
+      demoTimers.push(setTimeout(cycle,30000));
+    };
+    demoTimers.push(setTimeout(cycle,100));   // defer: running=true only after initAudio finishes
+    window.__demo={burst,g,ctx};
+    return g;
+  });
+  log("Demo started — 30 s cycle: normal → quiet → SCREAM burst (5.2 kHz) → impacts → SCREECH (12.5 kHz) → rumble.");
+}
+
+function initAudio(makeSource){
+  endRecording();
+  replay.active=false;
+  stopAll(false);
+  audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  analyser=audioCtx.createAnalyser();
+  analyser.fftSize=FFT_SIZE; analyser.smoothingTimeConstant=.55;
+  srcNode=makeSource(audioCtx);
+  srcNode.connect(analyser);
+  // recording tap (works for mic and demo)
+  const dest=audioCtx.createMediaStreamDestination();
+  srcNode.connect(dest);
+  recorder=new MediaRecorder(dest.stream);
+  recorder.ondataavailable=e=>recChunks.push(e.data);
+  recorder.onstop=()=>{
+    const blob=new Blob(recChunks,{type:recorder.mimeType});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="machine-recording-"+new Date().toISOString().replace(/[:.]/g,"-")+".webm";
+    a.click(); recChunks=[];
+    log("Audio recording saved to downloads.");
+  };
+  running=true; paused=false; startTime=performance.now(); frameCount=0;
+  trail.length=0; featureLog.length=0; gramInit=false;
+  manifoldPts.length=0; lastPushT=0;
+  Object.values(spikeState).forEach(st=>{st.avg=null;st.run=0;st.cool=0;st.frames=0;});
+  Object.keys(sparkHist).forEach(k=>delete sparkHist[k]);
+  $("dotLive").classList.add("live");
+  $("btnRec").disabled=false; $("btnBaseline").disabled=false; $("btnCsv").disabled=false;
+  fitAll(); if(!loopStarted){loopStarted=true; loop();}
+}
+
+function stopAll(clearUI=true){
+  running=false;
+  if(recorder&&recorder.state==="recording") recorder.stop();
+  if(demoTimers){demoTimers.forEach(clearTimeout); demoTimers=null;}
+  if(demoNodes){demoNodes.forEach(n=>{try{n.stop()}catch(e){}}); demoNodes=null;}
+  if(mediaStream){mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null;}
+  if(audioCtx){audioCtx.close(); audioCtx=null;}
+  if(clearUI) $("dotLive").classList.remove("live");
+}
+
+/* ---------- feature extraction ---------- */
+const freqData=new Float32Array(FFT_SIZE/2);
+const timeData=new Float32Array(FFT_SIZE);
+
+function extractFeatures(){
+  analyser.getFloatFrequencyData(freqData);
+  analyser.getFloatTimeDomainData(timeData);
+  const sr=audioCtx.sampleRate, nyq=sr/2, n=freqData.length, binHz=nyq/n;
+  // linear magnitudes
+  let sum=0, wsum=0, peakV=-Infinity, peakI=0, geo=0, arith=0, cnt=0;
+  const mags=new Float32Array(n);
+  for(let i=1;i<n;i++){
+    const m=Math.pow(10,freqData[i]/20); mags[i]=m;
+    sum+=m; wsum+=m*i*binHz;
+    if(freqData[i]>peakV){peakV=freqData[i];peakI=i;}
+    geo+=Math.log(m+1e-12); arith+=m; cnt++;
+  }
+  const centroid=sum>0?wsum/sum:0;
+  let varSum=0;
+  for(let i=1;i<n;i++){const d=i*binHz-centroid; varSum+=mags[i]*d*d;}
+  const spread=sum>0?Math.sqrt(varSum/sum):0;
+  const flatness=Math.exp(geo/cnt)/((arith/cnt)+1e-12);
+  // rolloff 85%
+  let acc=0, roll=0; const target=sum*.85;
+  for(let i=1;i<n;i++){acc+=mags[i]; if(acc>=target){roll=i*binHz;break;}}
+  // time-domain: RMS + crest
+  let rms=0, pk=0;
+  for(let i=0;i<timeData.length;i++){const v=timeData[i]; rms+=v*v; pk=Math.max(pk,Math.abs(v));}
+  rms=Math.sqrt(rms/timeData.length);
+  const db=20*Math.log10(rms+1e-9);
+  const crest=rms>0?pk/rms:0;
+  // baseline deviation (mean abs dB difference across spectrum)
+  let dev=null;
+  if(baseline){
+    let s=0; for(let i=1;i<n;i++) s+=Math.abs(freqData[i]-baseline[i]);
+    dev=(s/n)/60*100; // normalize vs 60 dB span
+  }
+  // 16 frequency-band energies (0..1) over the displayed range, for the side panel
+  const NB=16, showN=Math.floor(n*0.5), bands=new Float32Array(NB);
+  for(let b=0;b<NB;b++){
+    const s0=1+Math.floor(b/NB*showN), s1=Math.max(s0+1,Math.floor((b+1)/NB*showN));
+    let acc=0; for(let i=s0;i<s1;i++) acc+=freqData[i];
+    bands[b]=Math.max(0,Math.min(1,(acc/(s1-s0)+95)/60));
+  }
+  return {t:(performance.now()-startTime)/1000, db, rms, crest,
+          peak:peakI*binHz, centroid, spread, flatness, rolloff:roll, dev, nyq, bands};
+}
+
+/* ---------- drawing ---------- */
+let gramInit=false, rot=0, rotate3d=false;
+
+function drawSpectrum(f){
+  const c=cvSpec.getContext("2d"), W=cvSpec.width, H=cvSpec.height;
+  c.fillStyle="#242426"; c.fillRect(0,0,W,H);
+  const n=freqData.length, showN=Math.floor(n*0.5); // up to nyq/2 (~12kHz at 48k)
+  const bw=W/showN;
+  for(let i=0;i<showN;i++){
+    const dbv=freqData[i], h=Math.max(0,(dbv+100)/70)*H;
+    c.fillStyle=ampColor(Math.max(0,(dbv+90)/60));
+    c.fillRect(i*bw,H-h,Math.max(1,bw-0.5),h);
+  }
+  // axis labels
+  c.fillStyle="#9a9aa0"; c.font=`${10*devicePixelRatio}px sans-serif`;
+  const maxF=f.nyq*0.5;
+  for(let k=0;k<=5;k++){const fr=maxF*k/5;
+    c.fillText((fr/1000).toFixed(1)+"k",k/5*W*0.96+4,H-6*devicePixelRatio);}
+  // centroid marker
+  const cx=f.centroid/maxF*W;
+  c.strokeStyle="#ffd166"; c.lineWidth=2; c.setLineDash([6,4]);
+  c.beginPath(); c.moveTo(cx,0); c.lineTo(cx,H); c.stroke(); c.setLineDash([]);
+  c.fillStyle="#ffd166"; c.fillText("centroid",cx+5,14*devicePixelRatio);
+}
+
+function drawSpectrogram(f){
+  // continuously scrolling waterfall: shift existing image left, append newest column at right
+  const c=cvGram.getContext("2d"), W=cvGram.width, H=cvGram.height;
+  const n=freqData.length, showN=Math.floor(n*0.5);
+  const colW=Math.max(1,Math.round(2*devicePixelRatio));
+  if(!gramInit){c.fillStyle="#242426";c.fillRect(0,0,W,H);gramInit=true;}
+  c.drawImage(cvGram,colW,0,W-colW,H,0,0,W-colW,H);
+  const x=W-colW, rowH=H/showN;
+  for(let i=0;i<showN;i++){
+    const t=Math.max(0,Math.min(1,(freqData[i]+95)/60));
+    c.fillStyle=t<0.05?"#242426":spreadColor(t);
+    c.fillRect(x,H-(i+1)*rowH,colW,rowH+1);
+  }
+}
+
+function drawRadar(f){
+  const c=cvRadar.getContext("2d"), W=cvRadar.width, H=cvRadar.height;
+  c.fillStyle=th().chartBg; c.fillRect(0,0,W,H);
+  const cx=W/2, cy=H/2+8, R=Math.min(W,H)/2-46*devicePixelRatio;
+  const axes=[
+    ["LEVEL",       Math.max(0,Math.min(1,(f.db+70)/60))],
+    ["CENTROID",    Math.min(1,f.centroid/6000)],
+    ["SPREAD",      Math.min(1,f.spread/4000)],
+    ["TONALITY",    1-Math.min(1,f.flatness*4)],
+    ["CREST",       Math.min(1,f.crest/8)],
+    ["ROLLOFF",     Math.min(1,f.rolloff/10000)],
+  ];
+  const N=axes.length;
+  c.strokeStyle=th().grid; c.lineWidth=1;
+  for(let ring=1;ring<=4;ring++){
+    c.beginPath();
+    for(let i=0;i<=N;i++){const a=-Math.PI/2+i/N*2*Math.PI;
+      const r=R*ring/4;
+      i?c.lineTo(cx+r*Math.cos(a),cy+r*Math.sin(a)):c.moveTo(cx+r*Math.cos(a),cy+r*Math.sin(a));}
+    c.stroke();
+  }
+  c.fillStyle=th().label; c.font=`${10*devicePixelRatio}px sans-serif`; c.textAlign="center";
+  axes.forEach((ax,i)=>{const a=-Math.PI/2+i/N*2*Math.PI;
+    c.beginPath();c.moveTo(cx,cy);c.lineTo(cx+R*Math.cos(a),cy+R*Math.sin(a));c.stroke();
+    c.fillText(ax[0],cx+(R+24*devicePixelRatio)*Math.cos(a),cy+(R+18*devicePixelRatio)*Math.sin(a)+4);});
+  // polygon
+  c.beginPath();
+  axes.forEach((ax,i)=>{const a=-Math.PI/2+i/N*2*Math.PI, r=R*ax[1];
+    i?c.lineTo(cx+r*Math.cos(a),cy+r*Math.sin(a)):c.moveTo(cx+r*Math.cos(a),cy+r*Math.sin(a));});
+  c.closePath();
+  c.fillStyle="rgba(230,50,90,.45)"; c.fill();
+  c.strokeStyle="rgba(255,90,130,.9)"; c.lineWidth=2; c.stroke();
+  c.textAlign="left";
+}
+
+/* rainbow frequency scale: 0 Hz violet -> red -> orange -> yellow -> green -> cyan */
+function freqColor(fr,maxF,alpha){
+  let t=Math.max(0,Math.min(1,fr/maxF));
+  const stops=[[150,60,220],[235,45,70],[255,140,0],[255,225,60],[80,220,90],[70,225,225]];
+  const x=t*(stops.length-1), i=Math.min(stops.length-2,Math.floor(x)), fpt=x-i;
+  const cc=stops[i].map((v,k)=>Math.round(v+(stops[i+1][k]-v)*fpt));
+  return `rgba(${cc[0]},${cc[1]},${cc[2]},${alpha==null?1:alpha})`;
+}
+
+/* Machine Fault Diagnosis Space — static 3D scatter with 10 s retention.
+   X = dominant frequency (log)   -> new peaks / 2x-3x running-speed multiples = misalignment, looseness
+   Y = spectral centroid (log)    -> upward shift = grinding, friction, bearing wear
+   Z = crest factor (impacts)     -> outward jump = knocking, cracked gear teeth
+   size = RMS energy              -> big bubbles = high-energy impacts, imbalance
+   color = dominant frequency (same scale as the band panel on the right) */
+const manifoldPts=[];              // {t, dom, cen, crest, amp}
+let lastPushT=0, baselinePt=null;
+const RETAIN_S=10;
+
+function drawManifold(f,live=true){
+  const c=cvManifold.getContext("2d"), W=cvManifold.width, H=cvManifold.height;
+  const dpr=devicePixelRatio;
+  c.fillStyle="#08080b"; c.fillRect(0,0,W,H);
+  const maxF=f.nyq*0.5;
+
+  /* collect one point every ~0.1 s; each point lives exactly RETAIN_S seconds */
+  if(live){
+    if(f.t-lastPushT>=0.1){
+      lastPushT=f.t;
+      manifoldPts.push({t:f.t,dom:f.peak,cen:f.centroid,crest:f.crest,
+                        amp:Math.max(0,Math.min(1,(f.db+80)/60))});
+    }
+    while(manifoldPts.length&&f.t-manifoldPts[0].t>RETAIN_S) manifoldPts.shift();
+  }
+
+  if(rotate3d) rot+=0.0045;
+
+  const mL=52*dpr, mR=118*dpr, mT=26*dpr, mB=30*dpr;
+  const spanX=W-mL-mR-40*dpr, spanY=H-mT-mB-26*dpr;
+  const zdx=34*dpr, zdy=22*dpr;                    // isometric offset of the Z (crest) axis
+  const lg=Math.log10;
+  const xN=v=>Math.max(0,Math.min(1,(lg(Math.max(40,Math.min(maxF,v)))-lg(40))/(lg(maxF)-lg(40))));
+  const yN=v=>Math.max(0,Math.min(1,(lg(Math.max(200,Math.min(maxF,v)))-lg(200))/(lg(maxF)-lg(200))));
+  const zN=v=>Math.max(0,Math.min(1,(v-1)/7));      // crest 1..8+
+  const cx=mL+spanX/2;
+  const proj=p=>{
+    const x=xN(p.dom), y=yN(p.cen), z=zN(p.crest);
+    if(rotate3d){                                   // optional orbit for depth inspection
+      const nx=x-0.5, nz=z*0.8-0.4;
+      const X=nx*Math.cos(rot)-nz*Math.sin(rot), Z=nx*Math.sin(rot)+nz*Math.cos(rot);
+      const persp=1/(1+Z*0.30);
+      return {x:cx+X*spanX*persp+z*zdx*0.4, y:H-mB-y*spanY*persp-z*zdy*0.4, s:persp};
+    }
+    return {x:mL+x*spanX+z*zdx, y:H-mB-y*spanY-z*zdy, s:0.85+z*0.35};
+  };
+
+  /* axes (static view) */
+  c.strokeStyle="rgba(255,255,255,.18)"; c.lineWidth=1; c.font=`${8*dpr}px sans-serif`;
+  c.beginPath(); c.moveTo(mL,H-mB); c.lineTo(mL+spanX+zdx,H-mB); c.stroke();     // X
+  c.beginPath(); c.moveTo(mL,H-mB); c.lineTo(mL,mT+10*dpr); c.stroke();          // Y
+  c.beginPath(); c.setLineDash([3*dpr,3*dpr]);
+  c.moveTo(mL,H-mB); c.lineTo(mL+zdx*2.2,H-mB-zdy*2.2); c.stroke(); c.setLineDash([]);
+  c.fillStyle="#8a8a92";
+  [100,300,1000,3000,10000].filter(v=>v<maxF).forEach(v=>{
+    const x=mL+xN(v)*spanX;
+    c.fillText(v>=1000?(v/1000)+"k":v,x-6*dpr,H-mB+12*dpr);
+    c.fillRect(x,H-mB,1,3*dpr);
+  });
+  [300,1000,3000,10000].filter(v=>v<maxF).forEach(v=>{
+    const y=H-mB-yN(v)*spanY;
+    c.fillText(v>=1000?(v/1000)+"k":v,mL-24*dpr,y+3*dpr);
+    c.fillRect(mL-3*dpr,y,3*dpr,1);
+  });
+  c.textAlign="right"; c.fillText("X DOMINANT FREQ (Hz)",mL+spanX+zdx,H-mB+24*dpr); c.textAlign="left";
+  c.save(); c.translate(mL-32*dpr,mT+spanY*0.62); c.rotate(-Math.PI/2);
+  c.fillText("Y CENTROID / BRIGHTNESS (Hz)",0,0); c.restore();
+  c.fillText("Z IMPACTS (crest) ↗",mL+zdx*2.2+4*dpr,H-mB-zdy*2.2);
+
+  /* healthy-baseline marker */
+  if(baselinePt){
+    const q=proj(baselinePt);
+    c.strokeStyle="rgba(76,217,100,.85)"; c.lineWidth=1.4*dpr; c.setLineDash([4*dpr,3*dpr]);
+    c.strokeRect(q.x-14*dpr,q.y-14*dpr,28*dpr,28*dpr); c.setLineDash([]);
+    c.fillStyle="rgba(76,217,100,.9)"; c.font=`600 ${9*dpr}px sans-serif`; c.textAlign="center";
+    c.fillText("HEALTHY",q.x,q.y-18*dpr); c.textAlign="left";
+  }
+
+  /* retention bubbles: additive glow, fade with age */
+  const now=f.t;
+  c.globalCompositeOperation="lighter";
+  manifoldPts.forEach(p=>{
+    const age=(now-p.t)/RETAIN_S, fade=Math.max(0,1-age);
+    if(fade<=0) return;
+    const q=proj(p);
+    const r=Math.max(1.2*dpr,(1.5+p.amp*13)*dpr*q.s*(0.55+0.45*fade));
+    const g=c.createRadialGradient(q.x,q.y,0,q.x,q.y,r*1.8);
+    g.addColorStop(0,freqColor(p.dom,maxF,(0.015+0.08*p.amp)*fade));
+    g.addColorStop(1,freqColor(p.dom,maxF,0));
+    c.fillStyle=g;
+    c.beginPath(); c.arc(q.x,q.y,r*1.8,0,7); c.fill();
+    c.fillStyle=freqColor(p.dom,maxF,(0.06+0.16*p.amp)*fade);
+    c.beginPath(); c.arc(q.x,q.y,r*0.5,0,7); c.fill();
+  });
+  c.globalCompositeOperation="source-over";
+
+  /* label the strongest fresh bubbles */
+  const freshAll=manifoldPts.filter(p=>now-p.t<2.5).sort((a,b)=>b.amp-a.amp);
+  const fresh=[];
+  for(const p of freshAll){
+    if(fresh.length>=3) break;
+    const q=proj(p);
+    if(fresh.every(o=>{const w=proj(o);return Math.hypot(w.x-q.x,w.y-q.y)>30*dpr;})) fresh.push(p);
+  }
+  c.textAlign="center";
+  fresh.forEach(p=>{
+    const q=proj(p), s=(8+p.amp*8)*dpr*q.s;
+    c.strokeStyle="rgba(255,255,255,.9)"; c.lineWidth=1.5*dpr;
+    c.strokeRect(q.x-s,q.y-s,2*s,2*s);
+    c.fillStyle="rgba(255,255,255,.95)"; c.font=`600 ${10.5*dpr}px sans-serif`;
+    c.fillText((p.dom/1000).toFixed(2)+"k",q.x,q.y-s-5*dpr);
+    c.fillStyle="rgba(255,255,255,.6)"; c.font=`${8*dpr}px sans-serif`;
+    c.fillText("crest "+p.crest.toFixed(1),q.x,q.y+s+10*dpr);
+  });
+  c.textAlign="left";
+
+  /* right panel: live band energies — also the frequency color legend */
+  const px=W-mR+14*dpr, pw=70*dpr, rows=f.bands.length, rh=(H-mT-mB)/rows;
+  c.font=`${7.5*dpr}px sans-serif`;
+  for(let b=0;b<rows;b++){
+    const v=f.bands[b], y=H-mB-(b+1)*rh+rh*0.25;
+    const fr=(b+0.5)/rows*maxF;
+    c.fillStyle="rgba(150,140,255,.22)"; c.fillRect(px,y,pw,rh*0.5);
+    c.fillStyle=freqColor(fr,maxF,0.85);   c.fillRect(px,y,pw*v,rh*0.5);
+    c.fillStyle="#77777f";
+    c.fillText((fr/1000).toFixed(1)+"k",px+pw+4*dpr,y+rh*0.5);
+  }
+  c.fillStyle="#8a8a92"; c.fillText("BAND ENERGY · COLOR = FREQ",px,mT-8*dpr);
+
+  c.fillStyle="#77777f"; c.font=`${9*dpr}px sans-serif`; c.textAlign="center";
+  c.fillText("machine fault diagnosis space · each bubble lives 10 s · healthy = small bubbles in a stable zone",cx,H-6*dpr);
+  c.textAlign="left";
+}
+
+/* ---------- metric sparklines (movement history per metric) ---------- */
+const SPARK_KEYS={mDb:"db",mPeak:"peak",mCentroid:"centroid",mSpread:"spread",
+                  mFlat:"flatness",mCrest:"crest",mRoll:"rolloff",mDev:"dev"};
+const SPARK_LEN=180;               // ~3 minutes at the 10 Hz metric rate
+const sparkHist={};
+const sparkCv={};
+Object.keys(SPARK_KEYS).forEach(id=>{
+  sparkCv[id]=$(id).closest(".metric").querySelector(".spark");
+});
+function drawSpark(cv,data,alertOn){
+  const dpr=devicePixelRatio, w=cv.clientWidth, h=cv.clientHeight;
+  if(!w||!h) return;
+  if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+  }
+  const c=cv.getContext("2d"), W=cv.width, H=cv.height;
+  c.clearRect(0,0,W,H);
+  if(data.length<2) return;
+  let mn=Infinity,mx=-Infinity;
+  for(const v of data){if(v<mn)mn=v;if(v>mx)mx=v;}
+  if(mx-mn<1e-6){mn-=1;mx+=1;}
+  const pad=(mx-mn)*0.15; mn-=pad; mx+=pad;
+  const X=i=>2*dpr+i/(data.length-1)*(W-8*dpr);
+  const Y=v=>H-3*dpr-(v-mn)/(mx-mn)*(H-6*dpr);
+  const col=alertOn?"#ff6b60":"#4cd964";
+  c.beginPath();
+  data.forEach((v,i)=>i?c.lineTo(X(i),Y(v)):c.moveTo(X(i),Y(v)));
+  c.strokeStyle=col; c.lineWidth=1.4*dpr; c.stroke();
+  c.lineTo(X(data.length-1),H); c.lineTo(X(0),H); c.closePath();
+  const g=c.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,col+"55"); g.addColorStop(1,col+"00");
+  c.fillStyle=g; c.fill();
+  c.beginPath(); c.arc(X(data.length-1),Y(data[data.length-1]),2.5*dpr,0,7);
+  c.fillStyle=col; c.fill();
+}
+function updateSparks(f){
+  const vals={db:f.db,peak:f.peak,centroid:f.centroid,spread:f.spread,
+              flatness:f.flatness,crest:f.crest,rolloff:f.rolloff,dev:f.dev};
+  for(const [id,key] of Object.entries(SPARK_KEYS)){
+    const v=vals[key];
+    if(v==null||!isFinite(v)) continue;
+    const hist=sparkHist[id]||(sparkHist[id]=[]);
+    hist.push(v);
+    if(hist.length>SPARK_LEN) hist.shift();
+    drawSpark(sparkCv[id],hist,id==="mDev"&&v>25);
+  }
+}
+
+function updateMetricsUI(f){
+  $("mDb").textContent=f.db.toFixed(1);
+  $("mPeak").textContent=f.peak.toFixed(0);
+  $("mCentroid").textContent=f.centroid.toFixed(0);
+  $("mSpread").textContent=f.spread.toFixed(0);
+  $("mFlat").textContent=f.flatness.toFixed(3);
+  $("mCrest").textContent=f.crest.toFixed(2);
+  $("mRoll").textContent=f.rolloff.toFixed(0);
+  $("mDev").textContent=f.dev==null?"no baseline":f.dev.toFixed(1);
+}
+
+/* ---------- hourly data logging (Record button) ----------
+   While recording, every 0.1 s frame is stored (metrics + 96-bin spectrum
+   snapshot). At each clock-hour boundary the log auto-downloads as
+   machine-log-YYYY-MM-DD-HH.json and a fresh file starts. Spikes that occur
+   while recording are embedded in the same file. Use "Replay log" to play a
+   file back through all charts. */
+let dataLog=null;
+const hourKey=()=>{const d=new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"
+    +String(d.getDate()).padStart(2,"0")+"-"+String(d.getHours()).padStart(2,"0");};
+function newDataLog(){return {version:1,started:new Date().toISOString(),hour:hourKey(),
+  nyq:audioCtx?audioCtx.sampleRate/2:24000,frames:[],spikes:[]};}
+function specSnapshot(){
+  const n=freqData.length, showN=Math.floor(n*0.5), S=96, out=new Array(S);
+  for(let b=0;b<S;b++){
+    const i0=1+Math.floor(b/S*showN), i1=Math.max(i0+1,Math.floor((b+1)/S*showN));
+    let acc=0; for(let i=i0;i<i1;i++) acc+=freqData[i];
+    out[b]=Math.max(0,Math.min(99,Math.round(((acc/(i1-i0))+100)/70*99)));
+  }
+  return out;
+}
+function logDataFrame(f){
+  if(hourKey()!==dataLog.hour) flushDataLog(false);   // hour rolled over -> new file
+  dataLog.frames.push({t:+f.t.toFixed(2),db:+f.db.toFixed(1),pk:Math.round(f.peak),
+    ce:Math.round(f.centroid),sp:Math.round(f.spread),fl:+f.flatness.toFixed(3),
+    cr:+f.crest.toFixed(2),ro:Math.round(f.rolloff),s:specSnapshot()});
+}
+function flushDataLog(final){
+  if(dataLog&&(dataLog.frames.length||dataLog.spikes.length)){
+    const blob=new Blob([JSON.stringify(dataLog)],{type:"application/json"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="machine-log-"+dataLog.hour+".json";
+    a.click();
+    log("Data log saved: machine-log-"+dataLog.hour+".json ("+dataLog.frames.length+" frames, "
+        +dataLog.spikes.length+" spikes).");
+  }
+  dataLog=final?null:newDataLog();
+}
+function endRecording(){
+  if(!recording) return;
+  recording=false;
+  $("dotRec").classList.remove("reclive");
+  $("btnRec").textContent="● Record"; $("btnRec").classList.remove("rec");
+  if(recorder&&recorder.state==="recording") recorder.stop();
+  flushDataLog(true);
+}
+
+/* ---------- replay engine: drive all charts from a saved log file ---------- */
+const replay={active:false,frames:[],i:0,lastT:0,nyq:24000,name:""};
+function startReplay(data,name){
+  endRecording();
+  stopAll(); paused=false;
+  setRunningUI(false);
+  replay.active=true; replay.frames=data.frames; replay.i=0; replay.lastT=0;
+  replay.nyq=data.nyq||24000; replay.name=name;
+  manifoldPts.length=0; lastPushT=0; gramInit=false;
+  Object.keys(sparkHist).forEach(k=>delete sparkHist[k]);
+  if(data.spikes&&data.spikes.length)
+    log("This log contains "+data.spikes.length+" spike event(s) recorded during capture.");
+  log("Replaying "+name+" — "+data.frames.length+" frames (~"+(data.frames.length/600).toFixed(1)+" min). Charts now show the recorded data.");
+  fitAll();
+  if(!loopStarted){loopStarted=true;loop();}
+}
+function applyReplayFrame(fr){
+  const n=freqData.length, S=fr.s.length;
+  for(let i=0;i<n;i++){                       // upsample 96-bin snapshot back to full spectrum
+    const x=i/n*S, j=Math.min(S-1,Math.floor(x)), fp=x-j;
+    const a=fr.s[j], b=fr.s[Math.min(S-1,j+1)];
+    freqData[i]=-100+((a+(b-a)*fp)/99)*70;
+  }
+  const bands=new Float32Array(16);
+  for(let b2=0;b2<16;b2++){
+    let acc=0; const c0=Math.floor(b2/16*S), c1=Math.max(c0+1,Math.floor((b2+1)/16*S));
+    for(let i=c0;i<c1;i++) acc+=fr.s[i];
+    bands[b2]=Math.max(0,Math.min(1,(acc/(c1-c0))/99));
+  }
+  return {t:fr.t,db:fr.db,peak:fr.pk,centroid:fr.ce,spread:fr.sp,flatness:fr.fl,
+          crest:fr.cr,rolloff:fr.ro,dev:null,nyq:replay.nyq,bands,rms:0};
+}
+$("btnReplay").onclick=()=>$("replayFile").click();
+$("replayFile").onchange=e=>{
+  const file=e.target.files[0]; if(!file) return;
+  file.text().then(txt=>{
+    try{
+      const data=JSON.parse(txt);
+      if(!data.frames||!data.frames.length) throw new Error("file contains no frames");
+      startReplay(data,file.name);
+    }catch(err){alert("Could not read log file: "+err.message);}
+  });
+  e.target.value="";
+};
+
+/* ---------- spike / burst detection ----------
+   Browser mics measure dBFS (relative to mic max), not calibrated dB SPL, so the
+   absolute thresholds below are dBFS stand-ins for the SPL spec (85 / 90 dB SPL).
+   The relative rules (vs 10 s running average / vs healthy baseline) are
+   calibration-independent. Tune absDb per site after listening to real machines. */
+const SPIKE_CFG={
+  voice:{lo:3500,hi:8000,absDb:-44,relDb:10,minDb:-58,sustain:2,cooldown:40,
+         label:"VOICE BURST",desc:"scream / shock / glass (3.5–8 kHz)"},
+  machine:{lo:8000,hi:20000,absDb:-46,relDb:10,baselineRelDb:14,minDb:-60,sustain:3,cooldown:40,
+         label:"MACHINE ANOMALY",desc:"bearing / crack / grinding (8–20 kHz)"}
+};
+/* sensitivity presets shift the thresholds (dB); persisted per browser */
+const SPIKE_SENS={low:{abs:5,rel:5},medium:{abs:0,rel:0},high:{abs:-5,rel:-4}};
+let spikeSens=localStorage.getItem("spikeSens")||"medium";
+const SPIKE_WARMUP=50;             // ~5 s of frames before alerts can fire (learn the environment first)
+window.SPIKE_CFG=SPIKE_CFG;        // tune thresholds live from the browser console
+window.spikeDebug=()=>({           // live band readings, for on-site threshold tuning
+  voice:rangeLevel(SPIKE_CFG.voice.lo,SPIKE_CFG.voice.hi),
+  machine:rangeLevel(SPIKE_CFG.machine.lo,SPIKE_CFG.machine.hi),
+  avg:{voice:spikeState.voice.avg,machine:spikeState.machine.avg},
+  state:JSON.parse(JSON.stringify(spikeState)),sens:spikeSens});
+const spikeState={voice:{avg:null,run:0,cool:0,frames:0},machine:{avg:null,run:0,cool:0,frames:0}};
+let spikeEvents=[]; let spikeBaseline={};
+try{spikeEvents=JSON.parse(localStorage.getItem("spikeEvents")||"[]");}catch(e){}
+
+function rangeLevel(loF,hiF){        // power-average dBFS + peak bin over a frequency range
+  const sr=audioCtx.sampleRate, nyq=sr/2, n=freqData.length, binHz=nyq/n;
+  const i0=Math.max(1,Math.floor(loF/binHz)), i1=Math.min(n-1,Math.ceil(Math.min(hiF,nyq)/binHz));
+  if(i1<=i0) return {db:-120,peakHz:0};
+  let p=0,pk=-Infinity,pki=i0;
+  for(let i=i0;i<=i1;i++){p+=Math.pow(10,freqData[i]/10);
+    if(freqData[i]>pk){pk=freqData[i];pki=i;}}
+  return {db:10*Math.log10(p/(i1-i0+1)+1e-12), pkDb:pk, peakHz:pki*binHz};
+}
+
+function detectSpikes(f){
+  for(const key of Object.keys(SPIKE_CFG)){
+    const cfg=SPIKE_CFG[key], st=spikeState[key];
+    const sens=SPIKE_SENS[spikeSens]||SPIKE_SENS.medium;
+    const {db,pkDb,peakHz}=rangeLevel(cfg.lo,cfg.hi);
+    st.frames=(st.frames||0)+1;
+    const warm=st.frames>SPIKE_WARMUP;             // learn the environment before alerting
+    const loudEnough=pkDb>cfg.minDb;               // relative rules ignore quiet-room noise
+    /* all rules use the band's strongest bin — a narrow screech barely moves the
+       wide-band average, so averaging would mask exactly the events we care about */
+    const overAbs=pkDb>cfg.absDb+sens.abs;
+    const overRel=loudEnough&&st.avg!=null&&(pkDb-st.avg)>cfg.relDb+sens.rel;
+    const overBase=key==="machine"&&loudEnough&&spikeBaseline.machine!=null&&pkDb>spikeBaseline.machine+cfg.baselineRelDb+sens.rel;
+    const trig=warm&&(overAbs||overRel||overBase);
+    if(isFinite(pkDb)&&(!trig||st.avg==null||!isFinite(st.avg))){
+      // learn the running 10 s average only from non-spike sound; -Infinity frames
+      // (before audio flows) must never poison the average
+      st.avg=(st.avg==null||!isFinite(st.avg))?pkDb:st.avg+(1-Math.exp(-0.1/10))*(pkDb-st.avg);
+    }
+    if(st.cool>0) st.cool--;
+    if(trig){ st.run++;
+      if(st.run>=cfg.sustain&&st.cool===0){
+        st.cool=cfg.cooldown;               // ~4 s between repeated alerts of same type
+        const overBy=st.avg!=null?(pkDb-st.avg):0;
+        const reason=overBase?"above healthy baseline":overAbs?"absolute level":"spike vs 10 s average";
+        fireSpike(key,cfg,pkDb,peakHz,overBy,reason);
+      }
+    } else st.run=0;
+  }
+}
+
+let spikeAlertTimer=null;
+function fireSpike(key,cfg,db,peakHz,overBy,reason){
+  const msg="⚠ "+cfg.label+" — "+cfg.desc+" · peak "+(peakHz/1000).toFixed(2)+" kHz @ "
+    +db.toFixed(1)+" dBFS ("+(overBy>=0?"+":"")+overBy.toFixed(1)+" dB vs avg · "+reason+")";
+  const al=$("spikeAlert");
+  al.textContent=msg; al.classList.add("show");
+  clearTimeout(spikeAlertTimer);
+  spikeAlertTimer=setTimeout(()=>al.classList.remove("show"),3000);
+  spikeEvents.unshift({ts:new Date().toISOString(),elapsed:f0Elapsed(),type:key,
+    label:cfg.label,peakHz:Math.round(peakHz),db:+db.toFixed(1),overAvg:+overBy.toFixed(1),reason});
+  if(spikeEvents.length>300) spikeEvents.length=300;
+  if(recording&&dataLog) dataLog.spikes.push({ts:new Date().toISOString(),type:key,
+    peakHz:Math.round(peakHz),db:+db.toFixed(1),overAvg:+overBy.toFixed(1)});
+  try{localStorage.setItem("spikeEvents",JSON.stringify(spikeEvents));}catch(e){}
+  renderSpikeList();
+  log(msg);
+}
+function f0Elapsed(){return ((performance.now()-startTime)/1000).toFixed(1);}
+
+function renderSpikeList(){
+  const list=$("spikeList"), empty=$("spikeEmpty");
+  if(!spikeEvents.length){list.innerHTML="";empty.style.display="block";return;}
+  empty.style.display="none";
+  list.innerHTML="<table><tr><th>Time</th><th>Type</th><th>Peak freq</th><th>Level</th><th>vs 10 s avg</th><th>Trigger</th></tr>"
+    +spikeEvents.map(e=>"<tr><td>"+new Date(e.ts).toLocaleString()+"</td><td class='"+e.type+"'>"+e.label
+    +"</td><td>"+(e.peakHz/1000).toFixed(2)+" kHz</td><td>"+e.db+" dBFS</td><td>"
+    +(e.overAvg>=0?"+":"")+e.overAvg+" dB</td><td>"+e.reason+"</td></tr>").join("")+"</table>";
+}
+
+$("btnSpikeCsv").onclick=()=>{
+  const head="timestamp,type,peak_hz,level_dbfs,over_avg_db,trigger\n";
+  const blob=new Blob([head+spikeEvents.map(e=>[e.ts,e.label,e.peakHz,e.db,e.overAvg,e.reason].join(",")).join("\n")],{type:"text/csv"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="spike-events-"+new Date().toISOString().replace(/[:.]/g,"-")+".csv";
+  a.click();
+};
+$("sensSel").value=spikeSens;
+$("sensSel").onchange=e=>{
+  spikeSens=e.target.value;
+  localStorage.setItem("spikeSens",spikeSens);
+  log("Spike sensitivity set to "+spikeSens.toUpperCase()+".");
+};
+$("btnSpikeClear").onclick=()=>{
+  spikeEvents=[]; try{localStorage.removeItem("spikeEvents");}catch(e){}
+  renderSpikeList(); log("Spike event history cleared.");
+};
+
+/* ---------- alerting ---------- */
+function checkAlert(f){
+  const banner=$("alertBanner");
+  if(f.dev!=null&&f.dev>25){
+    banner.style.display="block";
+    banner.textContent="⚠ ACOUSTIC DEVIATION "+f.dev.toFixed(0)+"% from healthy baseline — inspect machine (possible bearing wear, imbalance, loose part, or abnormal process).";
+    if(frameCount%180===0) log("Deviation alert: "+f.dev.toFixed(1)+"% from baseline.");
+  } else banner.style.display="none";
+}
+
+/* ---------- main loop ---------- */
+function loop(){
+  if(replay.active){
+    const nw=performance.now();
+    if(nw-replay.lastT>=100){
+      replay.lastT=nw;
+      const fr=replay.frames[replay.i++];
+      if(!fr){
+        replay.active=false; paused=true;
+        log("Replay finished — display frozen on the last frame.");
+      } else {
+        const f=applyReplayFrame(fr); lastF=f;
+        drawSpectrum(f); drawSpectrogram(f); drawRadar(f); drawManifold(f,true);
+        updateMetricsUI(f); updateSparks(f);
+        $("clock").textContent="RPLY "+String(Math.floor(fr.t/60)).padStart(2,"0")+":"+String(Math.floor(fr.t%60)).padStart(2,"0");
+      }
+    }
+    requestAnimationFrame(loop);
+    return;
+  }
+  if(!running){
+    if(paused&&lastF){          // paused: freeze data, keep drawing (manifold keeps rotating)
+      drawSpectrum(lastF); drawRadar(lastF); drawManifold(lastF,false);
+    }
+    requestAnimationFrame(loop);
+    return;
+  }
+  const f=extractFeatures(); lastF=f;
+  drawSpectrum(f); drawSpectrogram(f); drawRadar(f); drawManifold(f,true);
+  if(frameCount%6===0){ // ~10 Hz metric/log rate
+    updateMetricsUI(f);
+    featureLog.push([new Date().toISOString(),f.t.toFixed(2),f.db.toFixed(2),f.peak.toFixed(1),
+      f.centroid.toFixed(1),f.spread.toFixed(1),f.flatness.toFixed(4),f.crest.toFixed(3),
+      f.rolloff.toFixed(1),f.dev==null?"":f.dev.toFixed(2)]);
+    updateSparks(f);
+    detectSpikes(f);
+    if(recording&&dataLog) logDataFrame(f);
+  }
+  checkAlert(f);
+  const el=(performance.now()-startTime)/1000;
+  $("clock").textContent=String(Math.floor(el/60)).padStart(2,"0")+":"+String(Math.floor(el%60)).padStart(2,"0");
+  frameCount++;
+  requestAnimationFrame(loop);
+}
+
+/* ---------- controls ---------- */
+function setRunningUI(on){
+  $("btnStart").textContent=on?"⏸ Pause":"▶ Start microphone";
+  const fab=$("fab");
+  fab.textContent=on?"⏸":"🎤";
+  fab.classList.toggle("stop",on);
+}
+function toggleInput(){
+  if(running){stopAll();paused=true;setRunningUI(false);
+    log("Paused — last readings stay on screen for analysis. Start again for a fresh session.");}
+  else{startMic();setRunningUI(true);}
+}
+$("btnStart").onclick=toggleInput;
+$("fab").onclick=toggleInput;
+$("btnDemo").onclick=()=>{startDemo();setRunningUI(true);};
+$("btnRec").onclick=()=>{
+  if(!recorder) return;
+  if(!recording){
+    recorder.start(); recording=true; dataLog=newDataLog();
+    $("dotRec").classList.add("reclive");
+    $("btnRec").textContent="■ Stop rec"; $("btnRec").classList.add("rec");
+    log("Recording started — audio + hourly data log (auto-saves machine-log-"+dataLog.hour+".json at each hour boundary).");
+  } else endRecording();
+};
+$("btnBaseline").onclick=()=>{
+  baseline=Float32Array.from(freqData);
+  if(lastF) baselinePt={dom:lastF.peak,cen:lastF.centroid,crest:lastF.crest};
+  spikeBaseline.machine=rangeLevel(SPIKE_CFG.machine.lo,SPIKE_CFG.machine.hi).pkDb;
+  log("Healthy baseline captured — deviations from this spectrum will now be flagged.");
+};
+$("btnRotate").onclick=()=>{
+  rotate3d=!rotate3d;
+  $("btnRotate").textContent="🔄 3D rotate: "+(rotate3d?"on":"off");
+};
+$("btnCsv").onclick=()=>{
+  const head="timestamp,elapsed_s,level_dbfs,dominant_hz,centroid_hz,spread_hz,flatness,crest,rolloff85_hz,baseline_dev_pct\n";
+  const blob=new Blob([head+featureLog.map(r=>r.join(",")).join("\n")],{type:"text/csv"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="machine-features-"+new Date().toISOString().replace(/[:.]/g,"-")+".csv";
+  a.click();
+  log("Exported "+featureLog.length+" feature rows to CSV.");
+};
+
+/* ---------- dark / light theme ----------
+   Page chrome, cards, and the radar go light; the three glow-based charts
+   (fault space, spectrum, spectrogram) stay dark — additive-light rendering
+   needs a dark canvas to be visible. */
+const THEMES={dark:{chartBg:"#242426",grid:"#4a4a4e",label:"#9a9aa0"},
+              light:{chartBg:"#ffffff",grid:"#cfcfd6",label:"#5c5c66"}};
+let themeName=localStorage.getItem("uiTheme")||"dark";
+const th=()=>THEMES[themeName];
+function applyTheme(){
+  document.body.classList.toggle("light",themeName==="light");
+  $("btnTheme").textContent=themeName==="dark"?"🌓 Light mode":"🌓 Dark mode";
+  if(lastF&&!running&&!replay.active) drawRadar(lastF);
+}
+$("btnTheme").onclick=()=>{
+  themeName=themeName==="dark"?"light":"dark";
+  localStorage.setItem("uiTheme",themeName);
+  applyTheme();
+};
+applyTheme();
+
+/* ---------- help popups ---------- */
+const HELP={
+manifold:`<h3>Machine Fault Diagnosis Space</h3>
+<p>A static 3D scatter where <b>position is the diagnosis</b>. Every ~0.1&nbsp;s the sound
+becomes one bubble; each bubble lives exactly <b>10 seconds</b>, then fades. A healthy
+machine keeps its bubbles small and clustered in one stable zone.</p>
+<h4>The axes</h4>
+<ul>
+<li><b>X — dominant frequency (Hz, log scale)</b>: the strongest tone right now. Machines
+have a fixed "running speed" frequency; a new position at 2× or 3× that frequency signals
+shaft misalignment or mechanical looseness.</li>
+<li><b>Y — spectral centroid (brightness)</b>: where the sound's energy is concentrated.
+Friction, lost lubrication, and bearing wear create high-pitched grinding — the bubbles
+climb upward even if the volume hasn't changed.</li>
+<li><b>Z — crest factor (impacts, drawn as the ↗ diagonal)</b>: how sharp the acoustic
+peaks are vs. the smooth hum. Cracked gear teeth and faulty bearings produce sharp
+clicks — bubbles jump outward along Z.</li>
+<li><b>Bubble size &amp; glow — RMS energy</b>: overall intensity. Massive bubbles mean
+high-energy impacts, imbalance, or structural shaking.</li>
+<li><b>Color</b> = the same frequency as the X position, using the color scale of the
+band panel on the right (violet = low Hz → red → orange → yellow → green → cyan = high kHz).</li>
+<li><b>Green dashed "HEALTHY" box</b> — appears when you press <b>Set healthy baseline</b>:
+the machine's normal position in this space. Live bubbles far from this box = deviation.</li>
+</ul>
+<h4>Visual diagnosis guide</h4>
+<ul>
+<li><b>Healthy operation</b> — small bubbles, tightly clustered in one zone, smoothly
+fading in place.</li>
+<li><b>Bearing failure</b> — bubbles explode in size (energy) and drift up the Y-axis
+(high-pitched friction).</li>
+<li><b>Misalignment / looseness</b> — bubbles shift along the X-axis to exact multiples
+(2×, 3×) of the machine's running-speed frequency.</li>
+<li><b>Imminent structural crack</b> — a trail of bubbles shoots outward on the Z-axis
+(sharp repeating metal-on-metal impacts).</li>
+</ul>
+<p>The 🔄 "3D rotate" button spins the space for depth inspection; the default static view
+keeps the X-axis scale readable.</p>`,
+spectrum:`<h3>Live Spectrum (FFT)</h3>
+<p>A real-time snapshot, ~60×/second, of <b>which frequencies are present right now and how strong each is</b>. Horizontal = frequency (Hz), bar height = energy. The dashed yellow line marks the spectral centroid.</p>
+<h4>What the shapes mean for a machine</h4>
+<ul>
+<li><b>Tall evenly-spaced spikes on the left</b> — a motor and its harmonics (multiples of rotation speed), e.g. 120 / 240 / 360&nbsp;Hz. This is the machine's fingerprint; spike position tells you rotation speed.</li>
+<li><b>Main spike moving left/right</b> — motor running slower/faster than usual: load change, belt slip, or speed-control issue.</li>
+<li><b>New spikes appearing between harmonics</b> ("sidebands") — classic early bearing-defect or gear-damage signature.</li>
+<li><b>The flat "grass" between spikes rising</b> — broadband noise increasing: friction, air leaks, wear.</li>
+<li><b>Yellow centroid line drifting right</b> — overall brightness increasing (same wear signal as the manifold drifting upward).</li>
+</ul>`,
+spectrogram:`<h3>Spectrogram — frequency over time</h3>
+<p>The spectrum stacked over time so you can see <b>history</b>. Each thin vertical slice is one moment; new audio appears at the right edge and scrolls left. Vertical = frequency, color brightness = energy. This is the standard chart in professional vibration/acoustic analysis.</p>
+<h4>How to read it</h4>
+<ul>
+<li><b>Horizontal lines</b> — continuous tones (motor hum + harmonics). Straight unbroken lines = stable machine.</li>
+<li><b>A line bending up or down</b> — the machine's speed changed at that moment.</li>
+<li><b>A bright vertical stripe</b> — a broadband burst: impact, clunk, or drop (all frequencies at once for an instant).</li>
+<li><b>A line flickering or breaking up</b> — intermittent contact: loose connection, chattering part, slipping belt.</li>
+<li><b>Whole image getting brighter over time</b> — noise floor rising = general wear or a developing leak.</li>
+</ul>`,
+radar:`<h3>Multi-scale Analysis — acoustic signature</h3>
+<p>Six sound features condensed into one shape — the machine's acoustic <b>fingerprint</b>. Each spoke runs 0 (center) to max (edge). What matters is the <b>shape, not any single number</b>: a healthy machine draws the same shape every day. <b>When the shape changes, the machine changed.</b></p>
+<h4>The six spokes</h4>
+<ul>
+<li><b>LEVEL</b> — loudness.</li>
+<li><b>CENTROID</b> — brightness (high = sharp/hissy).</li>
+<li><b>SPREAD</b> — how widely energy spreads across frequencies.</li>
+<li><b>TONALITY</b> — pure hum (high) vs. noisy (low).</li>
+<li><b>CREST</b> — impulsiveness: knocks/impacts vs. smooth running.</li>
+<li><b>ROLLOFF</b> — amount of high-frequency content.</li>
+</ul>
+<h4>Diagnostic examples</h4>
+<ul>
+<li>Bulging toward <b>CREST</b> — knocking/impacts appearing: bearing defects, loose parts.</li>
+<li>Shrinking <b>TONALITY</b> + growing <b>SPREAD</b> — clean hum turning into grinding noise.</li>
+<li>Growing <b>CENTROID</b> + <b>ROLLOFF</b> — friction/wear developing.</li>
+</ul>
+<p>Tip: screenshot the healthy shape on day one — anyone on the floor can compare shapes without training.</p>`,
+metrics:`<h3>Captured Metrics — the numbers in your CSV export</h3>
+<ul>
+<li><b>Level (dBFS)</b> — loudness; 0 = maximum, more negative = quieter. Healthy: stable within ±2–3 dB. Rising = wear, imbalance, load problem.</li>
+<li><b>Dominant freq (Hz)</b> — the single strongest tone, usually motor rotation × a small multiple. Healthy: constant. Shifting = speed change or belt slip.</li>
+<li><b>Spectral centroid (Hz)</b> — brightness (energy-weighted average frequency). Creeping up over weeks = <b>the classic early wear indicator</b>.</li>
+<li><b>Spectral spread (Hz)</b> — width of the energy distribution. Growing = rattle, looseness, noise replacing tone.</li>
+<li><b>Tonality / flatness (0–1)</b> — 0 = pure tone, 1 = pure noise. Rising toward 1 = grinding or air leak.</li>
+<li><b>Crest factor</b> — peak ÷ average. Smooth hum ≈ 1.4–3; impacts push it to 6+. Rising = knocking — <b>the most-watched number in bearing diagnostics</b>.</li>
+<li><b>Rolloff 85% (Hz)</b> — frequency below which 85% of energy sits. Rising = high-frequency (friction) energy growing.</li>
+<li><b>Baseline deviation %</b> — average distance between the current spectrum and the saved "healthy" one. Near 0–10% is normal; above ~25% triggers the red alert banner.</li>
+</ul>
+<h4>The most important idea</h4>
+<p>No value is "good" or "bad" on its own — every machine has its own normal. What matters is <b>change relative to that machine's own healthy baseline</b>:</p>
+<ul>
+<li>Run the monitor while the machine is known-good and press <b>Set healthy baseline</b>.</li>
+<li>Watch <b>deviation %</b> and <b>trends</b>, not absolute numbers.</li>
+<li>Slow drift over days/weeks = wear (schedule maintenance). Sudden jump = something happened right now (inspect immediately).</li>
+</ul>`,
+spikes:`<h3>Spike / Burst Detection</h3>
+<p>Two detectors watch every 0.1&nbsp;s frame. When one fires, a red alert shows for
+3 seconds and the event is recorded here (kept in this browser even after reload,
+up to 300 events).</p>
+<h4>1. Voice burst — 3.5–8 kHz</h4>
+<ul>
+<li>Human tissue cannot produce high-pitched sound at high volume without severe
+strain — energy here means a scream, panic shriek, shock cry, or glass shattering.</li>
+<li><b>Triggers (Medium sensitivity):</b> band level above −28 dBFS sustained ≥0.2 s,
+<i>or</i> a jump of more than +18 dB over that band's own 10-second running average
+(only when the band exceeds −52 dBFS, so quiet-room noise cannot trigger it).</li>
+</ul>
+<h4>2. Machine anomaly — 8–20 kHz</h4>
+<ul>
+<li>Normal machine hum never reaches this range with high energy. Energy here means
+loss of lubrication, gear teeth shearing, heavy friction grinding, or a pneumatic
+pipe burst.</li>
+<li><b>Triggers (Medium sensitivity):</b> band level above −24 dBFS sustained ≥0.3 s,
+<i>or</i> +20 dB over the running average, <i>or</i> +22 dB above the level saved by
+<b>Set healthy baseline</b> (relative rules require the band to exceed −48 dBFS).</li>
+</ul>
+<h4>Calibration note</h4>
+<p>Browser microphones are not calibrated, so levels are in <b>dBFS</b> (relative to
+the microphone's maximum), not sound-pressure dB SPL. The original spec (85 / 90 dB SPL)
+is represented by the −35 / −30 dBFS defaults — tune them per site. The <i>relative</i>
+triggers (vs 10 s average, vs baseline) are calibration-independent and are the most
+reliable in practice.</p>
+<h4>Sensitivity &amp; warm-up</h4>
+<p>The <b>Sensitivity</b> selector shifts every threshold: <b>Low</b> = 6 dB stricter
+(fewer alerts — noisy plants), <b>Medium</b> = default, <b>High</b> = ~6 dB looser (catch
+weaker events in quiet environments). Your choice is remembered in this browser. Detectors
+also stay silent for the first ~5 seconds of each session while learning the environment's
+normal sound — this prevents false alarms at application launch.</p>
+<p>A ~4 s cooldown per detector prevents one continuous event from flooding the history.
+Use <b>⬇ Events CSV</b> to export the log, <b>Clear</b> to reset it.</p>`};
+document.querySelectorAll(".help").forEach(b=>b.onclick=e=>{
+  e.stopPropagation();
+  document.getElementById("modalContent").innerHTML=HELP[b.dataset.help]||"";
+  document.getElementById("modalOverlay").classList.add("open");
+});
+document.getElementById("modalOverlay").onclick=e=>{
+  if(e.target.id==="modalOverlay") e.target.classList.remove("open");
+};
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape") document.getElementById("modalOverlay").classList.remove("open");
+});
+
+renderSpikeList();
+fitAll();
+log("Ready. Click 'Start microphone' near a machine, or 'Demo machine sound' to preview.");
+})();
+</script>
+</body>
+</html>

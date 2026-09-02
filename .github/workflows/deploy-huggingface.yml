@@ -1,0 +1,84 @@
+name: Deploy to Hugging Face Space
+
+# Deploys https://huggingface.co/spaces/YianXingJian/HighIntensityMachine
+# on every push to main (or manually via the Actions tab).
+#
+# One-time setup required:
+#   1. Create a Hugging Face access token with WRITE permission:
+#      https://huggingface.co/settings/tokens
+#   2. In this GitHub repo: Settings -> Secrets and variables -> Actions
+#      -> New repository secret, name it HF_TOKEN, paste the token.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  HF_USER: YianXingJian
+  HF_SPACE: HighIntensityMachine
+
+jobs:
+  verify:
+    name: Verify environment and app readiness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check required files exist
+        run: |
+          for f in app.html index.html README.md requirements.txt monitor.py; do
+            [ -f "$f" ] || { echo "::error::Missing required file: $f"; exit 1; }
+          done
+          echo "All required files present."
+
+      - name: Check Space config in README front matter
+        run: |
+          head -20 README.md | grep -q "sdk: static"      || { echo "::error::README.md missing 'sdk: static' front matter"; exit 1; }
+          head -20 README.md | grep -q "app_file: app.html" || { echo "::error::README.md missing 'app_file: app.html'"; exit 1; }
+          echo "Hugging Face Space config OK."
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install system audio library (PortAudio, required by sounddevice)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libportaudio2
+
+      - name: Install and verify all Python libraries
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -c "import sounddevice, numpy, matplotlib; print('numpy', numpy.__version__); print('matplotlib', matplotlib.__version__)" \
+            || { echo "::error::A required Python library failed to import"; exit 1; }
+
+      - name: Syntax-check monitor.py
+        run: python -m py_compile monitor.py
+
+      - name: Sanity-check app.html
+        run: |
+          grep -q "btnStart" app.html || { echo "::error::app.html appears incomplete"; exit 1; }
+          echo "app.html OK."
+
+  deploy:
+    name: Push to Hugging Face Space
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Deploy
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::error::HF_TOKEN secret is not set. Add it in Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          git push --force \
+            "https://${HF_USER}:${HF_TOKEN}@huggingface.co/spaces/${HF_USER}/${HF_SPACE}" \
+            HEAD:main
+          echo "Deployed to https://huggingface.co/spaces/${HF_USER}/${HF_SPACE}"

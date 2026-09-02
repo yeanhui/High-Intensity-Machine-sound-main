@@ -1,0 +1,5 @@
+# Dependencies for the Python desktop monitor (monitor.py).
+# The web app (index.html) is a static page and needs no dependencies.
+sounddevice>=0.4.6
+numpy>=1.24
+matplotlib>=3.7

@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Factory Sound Event Classifier</title>
+<style>
+  :root {
+    --ok: #1a7f37; --alert: #b91c1c; --bg: #f7f7f8; --card: #ffffff; --border: #e2e2e6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    margin: 0; padding: 24px; background: var(--bg); color: #1a1a1a;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 4px; }
+  .subtitle { color: #555; margin-bottom: 20px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px; margin-bottom: 16px;
+  }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tab-btn {
+    padding: 8px 16px; border: 1px solid var(--border); background: #fff; border-radius: 8px;
+    cursor: pointer; font-size: 0.95rem;
+  }
+  .tab-btn.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  button {
+    padding: 8px 14px; border-radius: 8px; border: 1px solid #1a1a1a; background: #1a1a1a;
+    color: #fff; cursor: pointer; font-size: 0.9rem;
+  }
+  button.secondary { background: #fff; color: #1a1a1a; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  .banner {
+    font-weight: 600; padding: 10px 14px; border-radius: 8px; margin: 12px 0;
+    background: #f1f1f3; color: #333;
+  }
+  .banner.ok { background: #e6f4ea; color: var(--ok); }
+  .banner.alert { background: #fdecea; color: var(--alert); }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 0.88rem; }
+  .bar-label { width: 220px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { flex: 1; background: #eee; border-radius: 4px; height: 14px; overflow: hidden; }
+  .bar-fill { height: 100%; background: #3b6fd6; }
+  .bar-pct { width: 44px; text-align: right; color: #555; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: #555; font-weight: 600; }
+  tr.alert-row td { color: var(--alert); font-weight: 600; }
+  .log-scroll { max-height: 260px; overflow-y: auto; }
+  select, input[type=range] { font-size: 0.9rem; }
+  .stats { color: #555; font-size: 0.9rem; }
+  details summary { cursor: pointer; font-weight: 600; }
+  .status { color: #555; font-size: 0.9rem; margin: 6px 0; }
+  audio { width: 100%; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🏭 Factory Sound Event Classifier</h1>
+  <p class="subtitle">
+    Live microphone → in-browser AI audio classification (AudioSet, 527 classes) → alerts + event log.
+    No microphone or access blocked? Use the <strong>Upload / Demo</strong> tab below.
+  </p>
+
+  <div class="card status" id="modelStatus">⏳ Loading model in your browser (first load only, ~30&ndash;60s)…</div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="live">Live microphone</button>
+    <button class="tab-btn" data-tab="upload">Upload / Demo</button>
+    <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
+    <button class="tab-btn" data-tab="how">ℹ️ How it works</button>
+  </div>
+
+  <div class="tab-panel active card" id="tab-live">
+    <div class="row">
+      <button id="micBtn" disabled>🎤 Start microphone</button>
+      <span class="stats" id="liveStats">Session stats — inferences: 0 · alerts: 0 · elapsed: 0s</span>
+    </div>
+    <div class="banner" id="liveBanner">⏳ Waiting for audio…</div>
+    <div id="liveBars"></div>
+    <div class="row">
+      <button class="secondary" id="exportBtn">Export CSV</button>
+      <button class="secondary" id="clearBtn">Clear log</button>
+    </div>
+    <div class="log-scroll">
+      <table>
+        <thead><tr><th>Time</th><th>Top label</th><th>Confidence</th><th>Alert</th></tr></thead>
+        <tbody id="logBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-panel card" id="tab-upload">
+    <p>No microphone? Try the bundled demo motor hum, or upload your own clip.</p>
+    <div class="row">
+      <button id="demoBtn" disabled>▶️ Demo machine sound</button>
+      <input type="file" id="fileInput" accept="audio/*" disabled />
+    </div>
+    <audio id="uploadAudio" controls style="display:none"></audio>
+    <div class="banner" id="uploadBanner"></div>
+    <div id="uploadBars"></div>
+  </div>
+
+  <div class="tab-panel card" id="tab-settings">
+    <div class="row">
+      <label for="threshold">Alert confidence threshold: <span id="thresholdVal">15%</span></label>
+    </div>
+    <div class="row">
+      <input type="range" id="threshold" min="0.05" max="0.95" step="0.01" value="0.15" style="width: 260px" />
+    </div>
+    <div class="row">
+      <label for="alertLabels">Alert keywords (comma-separated, matched against predicted labels):</label>
+    </div>
+    <div class="row">
+      <input type="text" id="alertLabels" style="width: 100%"
+        value="Alarm, Siren, Smoke detector, Fire alarm, Explosion, Glass, Buzzer" />
+    </div>
+  </div>
+
+  <div class="tab-panel card" id="tab-how">
+    <h3>How it works</h3>
+    <ul>
+      <li><strong>Model:</strong> <a href="https://huggingface.co/Xenova/ast-finetuned-audioset-10-10-0.4593" target="_blank">Xenova/ast-finetuned-audioset-10-10-0.4593</a>,
+        an Audio Spectrogram Transformer fine-tuned on <strong>AudioSet</strong> (527 sound-event classes:
+        engines, alarms, sirens, tools, mechanical fans, speech, etc.), run entirely client-side via
+        <a href="https://github.com/xenova/transformers.js" target="_blank">transformers.js</a> (ONNX Runtime Web / WebAssembly).
+        No audio ever leaves your device.</li>
+      <li><strong>Pipeline:</strong> microphone audio is captured with the Web Audio API, resampled to
+        16 kHz mono in-browser, accumulated into a rolling ~2s window, and classified about once per
+        second (throttled to stay responsive on CPU-only hardware).</li>
+      <li>Each class gets an independent <strong>confidence score (0–100%)</strong> — multiple sounds can
+        be "true" at once (e.g. "Engine" and "Vibration" together), unlike a single-label classifier.</li>
+      <li>The <strong>alert banner</strong> fires when any predicted label contains one of your alert
+        keywords (Alarm, Siren, Explosion, …) above the confidence threshold — both tunable in Settings.</li>
+      <li>The <strong>event log</strong> keeps a timestamped history of the top detection each cycle;
+        <strong>Export CSV</strong> downloads it.</li>
+    </ul>
+    <h3>Limitations</h3>
+    <ul>
+      <li>AudioSet's classes are general-purpose, not manufacturing-specific — there's no dedicated
+        "bearing wear" class; it recognizes broad categories (Engine, Mechanical fan, Vibration, Rattle,
+        Alarm) that correlate with machine condition.</li>
+      <li>Runs fully in the browser on the CPU: the model (~100MB) downloads once and is cached, but the
+        first load and first inference can take tens of seconds.</li>
+      <li>Browser microphones are consumer-grade and band-limited (~20 kHz) — the same limitation as the
+        DSP-only reference project this repo also contains.</li>
+    </ul>
+  </div>
+</div>
+
+<script type="module">
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
+
+env.allowLocalModels = false;
+
+const MODEL_ID = "Xenova/ast-finetuned-audioset-10-10-0.4593";
+const TARGET_SR = 16000;
+const WINDOW_SECONDS = 2.0;
+const MIN_INFER_INTERVAL_MS = 1000;
+const MAX_LOG_ROWS = 500;
+
+const modelStatus = document.getElementById("modelStatus");
+const micBtn = document.getElementById("micBtn");
+const demoBtn = document.getElementById("demoBtn");
+const fileInput = document.getElementById("fileInput");
+const liveBanner = document.getElementById("liveBanner");
+const liveBars = document.getElementById("liveBars");
+const liveStats = document.getElementById("liveStats");
+const logBody = document.getElementById("logBody");
+const uploadBanner = document.getElementById("uploadBanner");
+const uploadBars = document.getElementById("uploadBars");
+const uploadAudio = document.getElementById("uploadAudio");
+const exportBtn = document.getElementById("exportBtn");
+const clearBtn = document.getElementById("clearBtn");
+const thresholdEl = document.getElementById("threshold");
+const thresholdVal = document.getElementById("thresholdVal");
+const alertLabelsEl = document.getElementById("alertLabels");
+
+// ---- Tabs ----
+document.querySelectorAll(".tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
+  });
+});
+
+thresholdEl.addEventListener("input", () => {
+  thresholdVal.textContent = `${Math.round(thresholdEl.value * 100)}%`;
+});
+
+// ---- State ----
+let classifier = null;
+let log = [];
+let alertsCount = 0;
+let inferCount = 0;
+const startTime = Date.now();
+
+let audioCtx = null;
+let micStream = null;
+let processorNode = null;
+let rollingBuffer = new Float32Array(0);
+let lastInferTime = 0;
+let micRunning = false;
+
+function getAlertLabels() {
+  return alertLabelsEl.value.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+function getThreshold() {
+  return parseFloat(thresholdEl.value);
+}
+
+function checkAlert(results, threshold, alertLabels) {
+  return results.some(
+    (r) => r.score >= threshold && alertLabels.some((a) => r.label.toLowerCase().includes(a.toLowerCase()))
+  );
+}
+
+function renderBars(container, results) {
+  container.innerHTML = "";
+  for (const { label, score } of results) {
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    row.innerHTML = `
+      <div class="bar-label" title="${label}">${label}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(score * 100).toFixed(1)}%"></div></div>
+      <div class="bar-pct">${(score * 100).toFixed(0)}%</div>`;
+    container.appendChild(row);
+  }
+}
+
+function addLogRow(ts, label, score, isAlert) {
+  log.unshift([ts, label, score.toFixed(2), isAlert ? "YES" : ""]);
+  log = log.slice(0, MAX_LOG_ROWS);
+  const tr = document.createElement("tr");
+  if (isAlert) tr.className = "alert-row";
+  tr.innerHTML = `<td>${ts}</td><td>${label}</td><td>${score.toFixed(2)}</td><td>${isAlert ? "YES" : ""}</td>`;
+  logBody.prepend(tr);
+  while (logBody.rows.length > MAX_LOG_ROWS) logBody.deleteRow(-1);
+}
+
+function updateStats() {
+  const elapsed = Math.round((Date.now() - startTime) / 1000);
+  liveStats.textContent = `Session stats — inferences: ${inferCount} · alerts: ${alertsCount} · elapsed: ${elapsed}s`;
+}
+
+// ---- Resampling (linear interpolation, mono) ----
+function toMono(channelData, numChannels) {
+  if (numChannels === 1) return channelData[0];
+  const len = channelData[0].length;
+  const out = new Float32Array(len);
+  for (let i = 0; i < len; i++) {
+    let sum = 0;
+    for (let c = 0; c < numChannels; c++) sum += channelData[c][i];
+    out[i] = sum / numChannels;
+  }
+  return out;
+}
+
+function resampleLinear(input, fromRate, toRate) {
+  if (fromRate === toRate) return input;
+  const ratio = fromRate / toRate;
+  const outLength = Math.floor(input.length / ratio);
+  const output = new Float32Array(outLength);
+  for (let i = 0; i < outLength; i++) {
+    const srcPos = i * ratio;
+    const i0 = Math.floor(srcPos);
+    const i1 = Math.min(i0 + 1, input.length - 1);
+    const frac = srcPos - i0;
+    output[i] = input[i0] * (1 - frac) + input[i1] * frac;
+  }
+  return output;
+}
+
+// ---- Model loading ----
+async function loadModel() {
+  try {
+    classifier = await pipeline("audio-classification", MODEL_ID);
+    modelStatus.textContent = "✅ Model loaded — ready to classify.";
+    micBtn.disabled = false;
+    demoBtn.disabled = false;
+    fileInput.disabled = false;
+  } catch (err) {
+    modelStatus.textContent = `❌ Model failed to load: ${err.message}. Try reloading the page.`;
+    console.error(err);
+  }
+}
+loadModel();
+
+// ---- Classification helper ----
+async function classify(audio16k) {
+  const results = await classifier(audio16k, { topk: 5 });
+  return results;
+}
+
+function updateBanner(bannerEl, isAlert, topLabel, topScore) {
+  if (isAlert) {
+    bannerEl.className = "banner alert";
+    bannerEl.textContent = `🚨 ALERT — ${topLabel} (${Math.round(topScore * 100)}% confidence)`;
+  } else {
+    bannerEl.className = "banner ok";
+    bannerEl.textContent = `✅ Monitoring — top sound: ${topLabel} (${Math.round(topScore * 100)}% confidence)`;
+  }
+}
+
+// ---- Live microphone ----
+async function startMic() {
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    liveBanner.className = "banner alert";
+    liveBanner.textContent = "🚫 Microphone unavailable or permission denied — use the Upload / Demo tab instead.";
+    console.error(err);
+    return;
+  }
+
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const source = audioCtx.createMediaStreamSource(micStream);
+  processorNode = audioCtx.createScriptProcessor(4096, 1, 1);
+
+  processorNode.onaudioprocess = (e) => {
+    const chunk = e.inputBuffer.getChannelData(0);
+    const chunk16k = resampleLinear(chunk, audioCtx.sampleRate, TARGET_SR);
+
+    const maxLen = Math.floor(TARGET_SR * WINDOW_SECONDS);
+    const combined = new Float32Array(rollingBuffer.length + chunk16k.length);
+    combined.set(rollingBuffer);
+    combined.set(chunk16k, rollingBuffer.length);
+    rollingBuffer = combined.length > maxLen ? combined.slice(combined.length - maxLen) : combined;
+
+    const now = Date.now();
+    if (now - lastInferTime < MIN_INFER_INTERVAL_MS || rollingBuffer.length < TARGET_SR * 0.5) return;
+    lastInferTime = now;
+
+    const bufferSnapshot = rollingBuffer.slice();
+    classify(bufferSnapshot).then((results) => {
+      inferCount++;
+      const threshold = getThreshold();
+      const alertLabels = getAlertLabels();
+      const isAlert = checkAlert(results, threshold, alertLabels);
+      if (isAlert) alertsCount++;
+
+      const top = results[0];
+      updateBanner(liveBanner, isAlert, top.label, top.score);
+      renderBars(liveBars, results);
+      addLogRow(new Date().toLocaleTimeString(), top.label, top.score, isAlert);
+      updateStats();
+    }).catch((err) => console.error("Classification error:", err));
+  };
+
+  source.connect(processorNode);
+  processorNode.connect(audioCtx.destination);
+  micRunning = true;
+  micBtn.textContent = "⏹ Stop microphone";
+  liveBanner.textContent = "⏳ Listening…";
+}
+
+function stopMic() {
+  if (processorNode) processorNode.disconnect();
+  if (micStream) micStream.getTracks().forEach((t) => t.stop());
+  if (audioCtx) audioCtx.close();
+  micRunning = false;
+  micBtn.textContent = "🎤 Start microphone";
+  liveBanner.textContent = "⏸ Stopped.";
+}
+
+micBtn.addEventListener("click", () => {
+  if (micRunning) stopMic();
+  else startMic();
+});
+
+// ---- Upload / Demo tab ----
+async function classifyAudioBuffer(audioBuffer) {
+  const channelData = [];
+  for (let c = 0; c < audioBuffer.numberOfChannels; c++) channelData.push(audioBuffer.getChannelData(c));
+  const mono = toMono(channelData, audioBuffer.numberOfChannels);
+  const audio16k = resampleLinear(mono, audioBuffer.sampleRate, TARGET_SR).slice(0, TARGET_SR * 10);
+
+  const results = await classify(audio16k);
+  const threshold = getThreshold();
+  const alertLabels = getAlertLabels();
+  const isAlert = checkAlert(results, threshold, alertLabels);
+  const top = results[0];
+  updateBanner(uploadBanner, isAlert, top.label, top.score);
+  renderBars(uploadBars, results);
+}
+
+function makeDemoBuffer(ctx) {
+  const durationSec = 4.0;
+  const sr = ctx.sampleRate;
+  const buffer = ctx.createBuffer(1, sr * durationSec, sr);
+  const data = buffer.getChannelData(0);
+  const base = 90.0;
+  for (let i = 0; i < data.length; i++) {
+    const t = i / sr;
+    let s =
+      0.6 * Math.sin(2 * Math.PI * base * t) +
+      0.3 * Math.sin(2 * Math.PI * base * 2 * t) +
+      0.15 * Math.sin(2 * Math.PI * base * 3 * t) +
+      0.05 * (Math.random() * 2 - 1);
+    data[i] = s;
+  }
+  let max = 0;
+  for (let i = 0; i < data.length; i++) max = Math.max(max, Math.abs(data[i]));
+  for (let i = 0; i < data.length; i++) data[i] /= max || 1;
+  return buffer;
+}
+
+demoBtn.addEventListener("click", async () => {
+  uploadBanner.className = "banner";
+  uploadBanner.textContent = "⏳ Analyzing demo sound…";
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const buffer = makeDemoBuffer(ctx);
+  uploadAudio.style.display = "none";
+  await classifyAudioBuffer(buffer);
+  ctx.close();
+});
+
+fileInput.addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  uploadBanner.className = "banner";
+  uploadBanner.textContent = "⏳ Analyzing uploaded clip…";
+  uploadAudio.src = URL.createObjectURL(file);
+  uploadAudio.style.display = "block";
+
+  const arrayBuffer = await file.arrayBuffer();
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  try {
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    await classifyAudioBuffer(audioBuffer);
+  } catch (err) {
+    uploadBanner.className = "banner alert";
+    uploadBanner.textContent = `🚫 Could not decode audio file: ${err.message}`;
+  } finally {
+    ctx.close();
+  }
+});
+
+// ---- Export / clear ----
+exportBtn.addEventListener("click", () => {
+  if (log.length === 0) {
+    alert("No log entries yet — let the monitor run for a few seconds first.");
+    return;
+  }
+  const header = "time,top_label,confidence,alert\n";
+  const rows = log.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([header + rows], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `acoustic_events_${Date.now()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+clearBtn.addEventListener("click", () => {
+  log = [];
+  alertsCount = 0;
+  inferCount = 0;
+  logBody.innerHTML = "";
+  updateStats();
+});
+
+setInterval(updateStats, 1000);
+</script>
+</body>
+</html>
