@@ -12,13 +12,18 @@ short_description: Factory machine sound frequency monitor and recorder
 
 # Factory Acoustic Monitor — Machine Sound Frequency Recorder
 
+> **This folder is reference/study material only and is not auto-deployed from this repo.**
+> The live submission for this assignment is the in-browser ML audio classifier in
+> [`new-solution/`](new-solution/README.md), deployed to
+> <https://huggingface.co/spaces/yeanhui/HighIntensityMachine>.
+
 A browser-based prototype for **recording and visualizing machine sound frequencies** in an
 electronics-manufacturing environment, inspired by spectral "acoustic manifold" visualizations
 of bird song, adapted for industrial condition monitoring.
 
-## 🚀 Try it live
+## 🚀 Try it live (original author's demo)
 
-**Test the app here (no install needed):**
+**Test the original reference app here (no install needed):**
 
 ### 👉 https://yianxingjian-highintensitymachine.static.hf.space/ 👈
 
@@ -118,21 +123,17 @@ recording, **c** to export the feature CSV, **q** to quit (CSV auto-exports on e
 6. **Institutional knowledge capture** — experienced technicians "hear" problems; this system digitizes that skill so it scales across shifts and sites, and builds a labeled dataset that grows more valuable over time.
 7. **Energy & OEE insight** — acoustic load signatures reveal idle-but-running equipment and feed OEE availability metrics.
 
-## Deployment — Hugging Face Space (auto-deploy)
+## Deployment
 
-The live demo runs at <https://huggingface.co/spaces/YianXingJian/HighIntensityMachine>
-as a **static** Space (configured by the YAML front matter at the top of this README).
+This project (`app.html`, `monitor.py`, `index.html` at the repo root) is kept **only as
+reference/study material** for the `myTask.md` assignment and is **not** deployed by this
+repo's CI/CD anymore — only [`new-solution/`](new-solution/README.md) auto-deploys, via
+[`.github/workflows/deploy-new-solution.yml`](.github/workflows/deploy-new-solution.yml), to
+<https://huggingface.co/spaces/yeanhui/HighIntensityMachine>.
 
-Every push to `main` triggers `.github/workflows/deploy-huggingface.yml`, which:
-
-1. **Verifies the environment** — required files exist, the Space config is valid,
-   all Python libraries in `requirements.txt` install and import cleanly, and
-   `monitor.py` / `index.html` pass sanity checks.
-2. **Deploys** — force-pushes the repository to the Space, which rebuilds automatically.
-
-One-time setup: create a **write** token at <https://huggingface.co/settings/tokens>
-and save it as a GitHub Actions secret named `HF_TOKEN`
-(GitHub repo → Settings → Secrets and variables → Actions).
+The original author's own live copy of this reference project remains at
+<https://huggingface.co/spaces/YianXingJian/HighIntensityMachine> (a separate Hugging Face
+account, unaffected by this repo).
 
 > Microphone on Hugging Face: the Space page embeds the app in an iframe, which some
 > browsers restrict for mic access. If the mic button does not work there, open the
