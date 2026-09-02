@@ -22,11 +22,7 @@ electronics-manufacturing environment, inspired by spectral "acoustic manifold" 
 of bird song, adapted for industrial condition monitoring.
 
 This root-level `app.html` / `monitor.py` / `index.html` are **not deployed anywhere under
-this account** — they're kept only as reference/study material (see the callout above). The
-original project this was studied from has its own live demo, run by its original author on a
-separate Hugging Face account, unaffected by this repo:
-<https://yianxingjian-highintensitymachine.static.hf.space/>
-(Space page: <https://huggingface.co/spaces/YianXingJian/HighIntensityMachine>).
+this account** — they're kept only as reference/study material (see the callout above).
 
 ## Quick start (browser version)
 
@@ -123,10 +119,6 @@ repo's CI/CD anymore — only [`new-solution/`](new-solution/README.md) auto-dep
 my own live app:
 [Factory Sound Event Classifier](https://yeanhui-highintensitymachine.static.hf.space/index.html)
 (also viewable, embedded, at <https://huggingface.co/spaces/yeanhui/HighIntensityMachine>).
-
-The original reference project's own author still hosts their separate demo at
-<https://huggingface.co/spaces/YianXingJian/HighIntensityMachine> — a different Hugging Face
-account, unaffected by this repo or its deployments.
 
 ## Limitations of this prototype (what production adds)
 
