@@ -21,21 +21,12 @@ A browser-based prototype for **recording and visualizing machine sound frequenc
 electronics-manufacturing environment, inspired by spectral "acoustic manifold" visualizations
 of bird song, adapted for industrial condition monitoring.
 
-## 🚀 Try it live (original author's demo)
-
-**Test the original reference app here (no install needed):**
-
-### 👉 https://yianxingjian-highintensitymachine.static.hf.space/ 👈
-
-Hosted on Hugging Face Spaces — Space page:
-<https://huggingface.co/spaces/YianXingJian/HighIntensityMachine>
-
-Click **Demo machine sound** to try it instantly with a synthesized motor, or
-**Start microphone** to analyze real sound around you. Every chart has a **?**
-button explaining what it shows and what its movement means for machine condition.
-
-> Use the direct `.hf.space` link above for microphone access — the Space page embeds
-> the app in an iframe, which some browsers restrict for mic use.
+This root-level `app.html` / `monitor.py` / `index.html` are **not deployed anywhere under
+this account** — they're kept only as reference/study material (see the callout above). The
+original project this was studied from has its own live demo, run by its original author on a
+separate Hugging Face account, unaffected by this repo:
+<https://yianxingjian-highintensitymachine.static.hf.space/>
+(Space page: <https://huggingface.co/spaces/YianXingJian/HighIntensityMachine>).
 
 ## Quick start (browser version)
 
@@ -129,17 +120,13 @@ This project (`app.html`, `monitor.py`, `index.html` at the repo root) is kept *
 reference/study material** for the `myTask.md` assignment and is **not** deployed by this
 repo's CI/CD anymore — only [`new-solution/`](new-solution/README.md) auto-deploys, via
 [`.github/workflows/deploy-new-solution.yml`](.github/workflows/deploy-new-solution.yml), to
+my own live app:
 [Factory Sound Event Classifier](https://yeanhui-highintensitymachine.static.hf.space/index.html)
 (also viewable, embedded, at <https://huggingface.co/spaces/yeanhui/HighIntensityMachine>).
 
-The original author's own live copy of this reference project remains at
-<https://huggingface.co/spaces/YianXingJian/HighIntensityMachine> (a separate Hugging Face
-account, unaffected by this repo).
-
-> Microphone on Hugging Face: the Space page embeds the app in an iframe, which some
-> browsers restrict for mic access. If the mic button does not work there, open the
-> app directly at <https://yianxingjian-highintensitymachine.static.hf.space> —
-> served over HTTPS without the iframe, where microphone access works normally.
+The original reference project's own author still hosts their separate demo at
+<https://huggingface.co/spaces/YianXingJian/HighIntensityMachine> — a different Hugging Face
+account, unaffected by this repo or its deployments.
 
 ## Limitations of this prototype (what production adds)
 
