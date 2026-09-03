@@ -106,6 +106,25 @@
   .tab-panel li { margin-bottom: 8px; color: #333; }
   .tab-panel a { color: var(--primary); }
 
+  .setting-group { padding: 16px 0; border-bottom: 1px solid var(--border); }
+  .setting-group:last-child { border-bottom: none; padding-bottom: 0; }
+  .setting-group label { font-weight: 600; font-size: 0.9rem; display: block; margin-bottom: 4px; }
+  .setting-help { color: var(--muted); font-size: 0.8rem; margin: 0 0 10px; }
+  .setting-value { color: var(--primary); font-weight: 700; }
+  #alertLabels { width: 100%; }
+
+  .bar-row.top .bar-label { font-weight: 700; color: var(--text); }
+  .bar-row.top .bar-fill { background: linear-gradient(90deg, var(--ok), #34d399); }
+  .bar-row.top .bar-pct { color: var(--ok); font-weight: 700; }
+
+  .empty-state td { color: var(--muted); text-align: center; padding: 18px; font-style: italic; }
+
+  .pulse-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--primary);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(.7); } }
+
   footer { text-align: center; color: var(--muted); font-size: 0.8rem; margin-top: 28px; }
 </style>
 </head>
@@ -122,7 +141,7 @@
         </p>
       </div>
     </div>
-    <div class="status-pill" id="modelStatus">⏳ Loading model in your browser (first load only, ~30&ndash;60s)…</div>
+    <div class="status-pill" id="modelStatus"><span class="pulse-dot"></span> Loading model in your browser (first load only, ~30&ndash;60s)…</div>
   </div>
 
   <div class="tabs">
@@ -158,7 +177,7 @@
     <div class="log-scroll">
       <table>
         <thead><tr><th>Time</th><th>Top label</th><th>Confidence</th><th>Alert</th></tr></thead>
-        <tbody id="logBody"></tbody>
+        <tbody id="logBody"><tr class="empty-state"><td colspan="4">No detections yet — click Start microphone above.</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -175,17 +194,15 @@
   </div>
 
   <div class="tab-panel card" id="tab-settings">
-    <div class="row">
-      <label for="threshold">Alert confidence threshold: <span id="thresholdVal">15%</span></label>
+    <div class="setting-group">
+      <label for="threshold">Alert confidence threshold: <span class="setting-value" id="thresholdVal">15%</span></label>
+      <p class="setting-help">A predicted label must reach this confidence before it can trigger an alert.</p>
+      <input type="range" id="threshold" min="0.05" max="0.95" step="0.01" value="0.15" style="width: 100%; max-width: 320px" />
     </div>
-    <div class="row">
-      <input type="range" id="threshold" min="0.05" max="0.95" step="0.01" value="0.15" style="width: 260px" />
-    </div>
-    <div class="row">
-      <label for="alertLabels">Alert keywords (comma-separated, matched against predicted labels):</label>
-    </div>
-    <div class="row">
-      <input type="text" id="alertLabels" style="width: 100%"
+    <div class="setting-group">
+      <label for="alertLabels">Alert keywords</label>
+      <p class="setting-help">Comma-separated; matched (case-insensitive, partial match) against predicted labels.</p>
+      <input type="text" id="alertLabels"
         value="Alarm, Siren, Smoke detector, Fire alarm, Explosion, Glass, Buzzer" />
     </div>
   </div>
@@ -298,20 +315,22 @@ function checkAlert(results, threshold, alertLabels) {
 
 function renderBars(container, results) {
   container.innerHTML = "";
-  for (const { label, score } of results) {
+  results.forEach(({ label, score }, i) => {
     const row = document.createElement("div");
-    row.className = "bar-row";
+    row.className = i === 0 ? "bar-row top" : "bar-row";
     row.innerHTML = `
       <div class="bar-label" title="${label}">${label}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${(score * 100).toFixed(1)}%"></div></div>
       <div class="bar-pct">${(score * 100).toFixed(0)}%</div>`;
     container.appendChild(row);
-  }
+  });
 }
 
 function addLogRow(ts, label, score, isAlert) {
   log.unshift([ts, label, score.toFixed(2), isAlert ? "YES" : ""]);
   log = log.slice(0, MAX_LOG_ROWS);
+  const emptyRow = logBody.querySelector(".empty-state");
+  if (emptyRow) emptyRow.remove();
   const tr = document.createElement("tr");
   if (isAlert) tr.className = "alert-row";
   tr.innerHTML = `<td>${ts}</td><td>${label}</td><td>${score.toFixed(2)}</td><td>${isAlert ? "YES" : ""}</td>`;
@@ -771,7 +790,7 @@ clearBtn.addEventListener("click", () => {
   log = [];
   alertsCount = 0;
   inferCount = 0;
-  logBody.innerHTML = "";
+  logBody.innerHTML = '<tr class="empty-state"><td colspan="4">No detections yet — click Start microphone above.</td></tr>';
   updateStats();
 });
 
