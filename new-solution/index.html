@@ -136,8 +136,8 @@
       <div>
         <h1>Factory Sound Event Classifier</h1>
         <p class="subtitle">
-          Live microphone → in-browser AI audio classification (AudioSet, 527 classes) → alerts + event log.
-          No microphone or access blocked? Use the <strong>Upload / Demo</strong> tab below.
+          Live microphone or an uploaded/demo clip → in-browser AI audio classification (AudioSet, 527 classes)
+          → alerts + event log. No microphone? Use the demo/upload controls below instead.
         </p>
       </div>
     </div>
@@ -145,8 +145,7 @@
   </div>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="live">Live microphone</button>
-    <button class="tab-btn" data-tab="upload">Upload / Demo</button>
+    <button class="tab-btn active" data-tab="live">Monitor</button>
     <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
     <button class="tab-btn" data-tab="how">ℹ️ How it works</button>
   </div>
@@ -157,6 +156,11 @@
       <button class="secondary" id="baselineBtn" disabled>📌 Set healthy baseline</button>
       <span class="stats" id="liveStats">Session stats — inferences: 0 · alerts: 0 · elapsed: 0s</span>
     </div>
+    <div class="row">
+      <button id="demoBtn" disabled>▶️ Demo machine sound</button>
+      <input type="file" id="fileInput" accept="audio/*" disabled />
+    </div>
+    <audio id="uploadAudio" controls style="display:none"></audio>
     <div class="stats" id="baselineStat">No healthy baseline set — sound-event alerts only.</div>
     <div class="banner" id="liveBanner">⏳ Waiting for audio…</div>
     <div class="viz-row">
@@ -179,40 +183,7 @@
     <div class="log-scroll">
       <table>
         <thead><tr><th>Time</th><th>Top label</th><th>Confidence</th><th>Deviation</th><th>Alert</th></tr></thead>
-        <tbody id="logBody"><tr class="empty-state"><td colspan="5">No detections yet — click Start microphone above.</td></tr></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="tab-panel card" id="tab-upload">
-    <p>No microphone? Try the bundled demo motor hum, or upload your own clip.</p>
-    <div class="row">
-      <button id="demoBtn" disabled>▶️ Demo machine sound</button>
-      <input type="file" id="fileInput" accept="audio/*" disabled />
-    </div>
-    <audio id="uploadAudio" controls style="display:none"></audio>
-    <div class="banner" id="uploadBanner"></div>
-    <div class="viz-row">
-      <div class="viz-col">
-        <div class="viz-label">Live spectrum</div>
-        <canvas id="uploadSpecBars" width="1200" height="260"></canvas>
-        <div class="viz-caption">Updates while the clip plays. X-axis: frequency, log scale (40&nbsp;Hz&ndash;12&nbsp;kHz). Dashed gold line = spectral centroid.</div>
-      </div>
-      <div class="viz-col">
-        <div class="viz-label">Spectrogram</div>
-        <canvas id="uploadSpecWaterfall" width="1200" height="260"></canvas>
-        <div class="viz-caption">Time flows left&rarr;right as the clip plays. Left axis: frequency, log scale. Brighter = louder.</div>
-      </div>
-    </div>
-    <div id="uploadBars"></div>
-    <div class="row">
-      <button class="secondary" id="uploadExportBtn">Export CSV</button>
-      <button class="secondary" id="uploadClearBtn">Clear log</button>
-    </div>
-    <div class="log-scroll">
-      <table>
-        <thead><tr><th>Time</th><th>Top label</th><th>Confidence</th><th>Deviation</th><th>Alert</th></tr></thead>
-        <tbody id="uploadLogBody"><tr class="empty-state"><td colspan="5">No detections yet — try the demo sound or upload a clip.</td></tr></tbody>
+        <tbody id="logBody"><tr class="empty-state"><td colspan="5">No detections yet — start the microphone or try the demo sound.</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -231,11 +202,11 @@
     </div>
     <div class="setting-group">
       <label for="devThreshold">Baseline deviation alert threshold: <span class="setting-value" id="devThresholdVal">30%</span></label>
-      <p class="setting-help">After clicking "Set healthy baseline" on the Live tab (requires the microphone to be
-        running), an alert also fires — on both the Live and Upload/Demo tabs — if the spectrum drifts this far
-        from the saved baseline shape, independent of the AI labels. Useful for catching abnormal sounds the
-        model doesn't have a specific category for. No baseline captured yet = this check is skipped entirely
-        (shown as "—" in the log).</p>
+      <p class="setting-help">After clicking "Set healthy baseline" (works from either the microphone or a
+        playing demo/uploaded clip), an alert also fires if the spectrum drifts this far from the saved
+        baseline shape, independent of the AI labels. Useful for catching abnormal sounds the model doesn't
+        have a specific category for. No baseline captured yet = this check is skipped entirely (shown as
+        "—" in the log).</p>
       <input type="range" id="devThreshold" min="5" max="80" step="1" value="30" style="width: 100%; max-width: 320px" />
     </div>
   </div>
@@ -260,11 +231,12 @@
       <li>The <strong>live spectrum</strong> and <strong>spectrogram</strong> panels are a direct read of
         the microphone signal (via a Web Audio <code>AnalyserNode</code>) independent of the AI model —
         useful for visually spotting tonal shifts, rattles, or sudden spikes at a glance.</li>
-      <li><strong>Set healthy baseline</strong> (Live tab) captures the current spectral "fingerprint" while
-        the machine runs normally. Afterward, every cycle computes a <strong>baseline deviation %</strong> —
-        a simple, unsupervised anomaly score independent of the AI labels — and can trigger its own alert
-        (threshold in Settings). This is how the app can flag "something sounds different" even for
-        sounds AudioSet has no specific category for (e.g. a developing mechanical fault).</li>
+      <li><strong>Set healthy baseline</strong> captures the current spectral "fingerprint" (from either the
+        microphone or a playing demo/uploaded clip) while the machine runs normally. Afterward, every cycle
+        computes a <strong>baseline deviation %</strong> — a simple, unsupervised anomaly score independent of
+        the AI labels — and can trigger its own alert (threshold in Settings). This is how the app can flag
+        "something sounds different" even for sounds AudioSet has no specific category for (e.g. a developing
+        mechanical fault).</li>
     </ul>
     <h3>Limitations</h3>
     <ul>
@@ -299,14 +271,9 @@ const liveBanner = document.getElementById("liveBanner");
 const liveBars = document.getElementById("liveBars");
 const liveStats = document.getElementById("liveStats");
 const logBody = document.getElementById("logBody");
-const uploadLogBody = document.getElementById("uploadLogBody");
-const uploadBanner = document.getElementById("uploadBanner");
-const uploadBars = document.getElementById("uploadBars");
 const uploadAudio = document.getElementById("uploadAudio");
 const exportBtn = document.getElementById("exportBtn");
 const clearBtn = document.getElementById("clearBtn");
-const uploadExportBtn = document.getElementById("uploadExportBtn");
-const uploadClearBtn = document.getElementById("uploadClearBtn");
 const thresholdEl = document.getElementById("threshold");
 const thresholdVal = document.getElementById("thresholdVal");
 const alertLabelsEl = document.getElementById("alertLabels");
@@ -347,11 +314,10 @@ let vizRafId = null;
 let rollingBuffer = new Float32Array(0);
 let lastInferTime = 0;
 let micRunning = false;
+let micWarmupUntil = 0; // Date.now() timestamp; baseline capture from the mic is ignored until then
 
 const specBarsCanvas = document.getElementById("specBars");
 const specWaterfallCanvas = document.getElementById("specWaterfall");
-const uploadSpecBarsCanvas = document.getElementById("uploadSpecBars");
-const uploadSpecWaterfallCanvas = document.getElementById("uploadSpecWaterfall");
 
 function getAlertLabels() {
   return alertLabelsEl.value.split(",").map((s) => s.trim()).filter(Boolean);
@@ -389,16 +355,13 @@ function addLogRow(ts, label, score, devPct, isAlert) {
   log.unshift([ts, label, score.toFixed(2), devText, isAlert ? "YES" : ""]);
   log = log.slice(0, MAX_LOG_ROWS);
 
-  const rowHtml = `<td>${ts}</td><td>${label}</td><td>${score.toFixed(2)}</td><td>${devText}</td><td>${isAlert ? "YES" : ""}</td>`;
-  for (const tbody of [logBody, uploadLogBody]) {
-    const emptyRow = tbody.querySelector(".empty-state");
-    if (emptyRow) emptyRow.remove();
-    const tr = document.createElement("tr");
-    if (isAlert) tr.className = "alert-row";
-    tr.innerHTML = rowHtml;
-    tbody.prepend(tr);
-    while (tbody.rows.length > MAX_LOG_ROWS) tbody.deleteRow(-1);
-  }
+  const emptyRow = logBody.querySelector(".empty-state");
+  if (emptyRow) emptyRow.remove();
+  const tr = document.createElement("tr");
+  if (isAlert) tr.className = "alert-row";
+  tr.innerHTML = `<td>${ts}</td><td>${label}</td><td>${score.toFixed(2)}</td><td>${devText}</td><td>${isAlert ? "YES" : ""}</td>`;
+  logBody.prepend(tr);
+  while (logBody.rows.length > MAX_LOG_ROWS) logBody.deleteRow(-1);
 }
 
 function updateStats() {
@@ -625,20 +588,41 @@ function sizeCanvasToDisplay(canvas) {
   canvas.height = h;
 }
 
+// Whichever source is currently producing audio -- the live mic takes priority if both
+// happen to be active (e.g. a demo clip left playing while the mic is also on).
+function getActiveAnalyser() {
+  if (micRunning && analyserNode) return { analyser: analyserNode, sampleRate: audioCtx.sampleRate };
+  if (uploadAnalyser && !uploadAudio.paused && !uploadAudio.ended) {
+    return { analyser: uploadAnalyser, sampleRate: uploadAudioCtx.sampleRate };
+  }
+  return null;
+}
+
 function vizLoop() {
-  if (!micRunning || !analyserNode) return;
-  const freqData = new Uint8Array(analyserNode.frequencyBinCount);
-  analyserNode.getByteFrequencyData(freqData);
-  drawSpectrumBars(specBarsCanvas, freqData, audioCtx.sampleRate);
-  drawWaterfallColumn(specWaterfallCanvas, freqData, audioCtx.sampleRate);
+  const active = getActiveAnalyser();
+  if (!active) { vizRafId = null; return; }
+  const freqData = new Uint8Array(active.analyser.frequencyBinCount);
+  active.analyser.getByteFrequencyData(freqData);
+  drawSpectrumBars(specBarsCanvas, freqData, active.sampleRate);
+  drawWaterfallColumn(specWaterfallCanvas, freqData, active.sampleRate);
 
   if (healthyBaseline) {
-    const bars = sampleLogBars(freqData, audioCtx.sampleRate, BASELINE_BAR_COUNT);
+    const bars = sampleLogBars(freqData, active.sampleRate, BASELINE_BAR_COUNT);
     currentDevPct = computeDeviationPct(bars, healthyBaseline);
     baselineStat.textContent = `Baseline deviation: ${currentDevPct.toFixed(0)}%`;
   }
 
   vizRafId = requestAnimationFrame(vizLoop);
+}
+
+// Starts (or resumes) the shared spectrum/spectrogram render loop. Safe to call whenever a
+// new audio source becomes active -- if the loop is already running, this is a no-op.
+function startViz() {
+  if (vizRafId) return;
+  sizeCanvasToDisplay(specBarsCanvas);
+  sizeCanvasToDisplay(specWaterfallCanvas);
+  initWaterfallAxis(specWaterfallCanvas);
+  vizLoop();
 }
 
 // ---- Model loading (runs in a Web Worker so the UI thread stays responsive) ----
@@ -653,6 +637,7 @@ worker.onmessage = (e) => {
     micBtn.disabled = false;
     demoBtn.disabled = false;
     fileInput.disabled = false;
+    baselineBtn.disabled = false;
   } else if (type === "result") {
     if (pending.has(id)) {
       pending.get(id).resolve(results);
@@ -700,7 +685,7 @@ async function startMic() {
     micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
     liveBanner.className = "banner alert";
-    liveBanner.textContent = "🚫 Microphone unavailable or permission denied — use the Upload / Demo tab instead.";
+    liveBanner.textContent = "🚫 Microphone unavailable or permission denied — try the demo sound or upload a clip instead.";
     console.error(err);
     return;
   }
@@ -748,17 +733,10 @@ async function startMic() {
   source.connect(processorNode);
   processorNode.connect(audioCtx.destination);
   micRunning = true;
+  micWarmupUntil = Date.now() + 2000; // ignore baseline capture for a couple seconds (startup pop)
   micBtn.textContent = "⏹ Stop microphone";
   liveBanner.textContent = "⏳ Listening…";
-  sizeCanvasToDisplay(specBarsCanvas);
-  sizeCanvasToDisplay(specWaterfallCanvas);
-  initWaterfallAxis(specWaterfallCanvas);
-  vizLoop();
-
-  // Warm-up guard: disable baseline capture for a couple of seconds so a startup click/pop
-  // doesn't get saved as the "healthy" reference.
-  baselineBtn.disabled = true;
-  setTimeout(() => { if (micRunning) baselineBtn.disabled = false; }, 2000);
+  startViz();
 }
 
 function stopMic() {
@@ -766,11 +744,9 @@ function stopMic() {
   if (analyserNode) analyserNode.disconnect();
   if (micStream) micStream.getTracks().forEach((t) => t.stop());
   if (audioCtx) audioCtx.close();
-  if (vizRafId) cancelAnimationFrame(vizRafId);
   micRunning = false;
   micBtn.textContent = "🎤 Start microphone";
   liveBanner.textContent = "⏸ Stopped.";
-  baselineBtn.disabled = true;
 }
 
 micBtn.addEventListener("click", () => {
@@ -787,22 +763,30 @@ baselineBtn.addEventListener("click", () => {
     baselineStat.textContent = "No healthy baseline set — sound-event alerts only.";
     return;
   }
-  if (!analyserNode || !audioCtx) return;
-  const freqData = new Uint8Array(analyserNode.frequencyBinCount);
-  analyserNode.getByteFrequencyData(freqData);
-  healthyBaseline = sampleLogBars(freqData, audioCtx.sampleRate, BASELINE_BAR_COUNT);
+
+  const active = getActiveAnalyser();
+  if (!active) {
+    alert("Start the microphone, or play the demo sound / an uploaded clip, then set the baseline while it's running.");
+    return;
+  }
+  if (active.analyser === analyserNode && Date.now() < micWarmupUntil) {
+    alert("Give the microphone a couple more seconds to settle before setting the baseline.");
+    return;
+  }
+
+  const freqData = new Uint8Array(active.analyser.frequencyBinCount);
+  active.analyser.getByteFrequencyData(freqData);
+  healthyBaseline = sampleLogBars(freqData, active.sampleRate, BASELINE_BAR_COUNT);
   baselineBtn.textContent = "🗑 Clear baseline";
-  baselineStat.textContent = "Healthy baseline captured — comparing live sound against it (white outline on spectrum).";
+  baselineStat.textContent = "Healthy baseline captured — comparing sound against it (white outline on spectrum).";
 });
 
-// ---- Upload / Demo tab ----
+// ---- Upload / Demo ----
 // Visualizes the demo/uploaded clip while it plays, by tapping the <audio> element's own
 // output with a MediaElementAudioSourceNode -> AnalyserNode (kept separate from the live-mic
-// AnalyserNode so both tabs work independently).
+// AnalyserNode so both work independently, and can be combined via getActiveAnalyser()).
 let uploadAudioCtx = null;
 let uploadAnalyser = null;
-let uploadVizRafId = null;
-let uploadVizReady = false;
 
 function ensureUploadAudioGraph() {
   if (uploadAudioCtx) return;
@@ -815,37 +799,10 @@ function ensureUploadAudioGraph() {
   uploadAnalyser.connect(uploadAudioCtx.destination);
 }
 
-function uploadVizLoop() {
-  if (uploadAudio.paused || uploadAudio.ended || !uploadAnalyser) return;
-  const freqData = new Uint8Array(uploadAnalyser.frequencyBinCount);
-  uploadAnalyser.getByteFrequencyData(freqData);
-  drawSpectrumBars(uploadSpecBarsCanvas, freqData, uploadAudioCtx.sampleRate);
-  drawWaterfallColumn(uploadSpecWaterfallCanvas, freqData, uploadAudioCtx.sampleRate);
-
-  if (healthyBaseline) {
-    const bars = sampleLogBars(freqData, uploadAudioCtx.sampleRate, BASELINE_BAR_COUNT);
-    currentDevPct = computeDeviationPct(bars, healthyBaseline);
-  }
-
-  uploadVizRafId = requestAnimationFrame(uploadVizLoop);
-}
-
 uploadAudio.addEventListener("play", () => {
-  if (!uploadVizReady) {
-    sizeCanvasToDisplay(uploadSpecBarsCanvas);
-    sizeCanvasToDisplay(uploadSpecWaterfallCanvas);
-    initWaterfallAxis(uploadSpecWaterfallCanvas);
-    uploadVizReady = true;
-  }
   if (uploadAudioCtx && uploadAudioCtx.state === "suspended") uploadAudioCtx.resume();
-  if (uploadVizRafId) cancelAnimationFrame(uploadVizRafId);
-  uploadVizLoop();
+  startViz();
 });
-["pause", "ended"].forEach((evt) =>
-  uploadAudio.addEventListener(evt, () => {
-    if (uploadVizRafId) cancelAnimationFrame(uploadVizRafId);
-  })
-);
 
 async function classifyAudioBuffer(audioBuffer) {
   const channelData = [];
@@ -860,8 +817,8 @@ async function classifyAudioBuffer(audioBuffer) {
   const devPct = healthyBaseline ? currentDevPct : null;
   const isDevAlert = healthyBaseline !== null && devPct !== null && devPct >= getDevThreshold();
   const top = results[0];
-  updateBanner(uploadBanner, isLabelAlert, isDevAlert, top.label, top.score, devPct);
-  renderBars(uploadBars, results);
+  updateBanner(liveBanner, isLabelAlert, isDevAlert, top.label, top.score, devPct);
+  renderBars(liveBars, results);
   addLogRow(new Date().toLocaleTimeString(), top.label, top.score, devPct, isLabelAlert || isDevAlert);
 }
 
@@ -924,8 +881,8 @@ function audioBufferToWavBlob(buffer) {
 }
 
 demoBtn.addEventListener("click", async () => {
-  uploadBanner.className = "banner";
-  uploadBanner.textContent = "⏳ Playing and analyzing demo sound…";
+  liveBanner.className = "banner";
+  liveBanner.textContent = "⏳ Playing and analyzing demo sound…";
   ensureUploadAudioGraph();
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const buffer = makeDemoBuffer(ctx);
@@ -942,8 +899,8 @@ demoBtn.addEventListener("click", async () => {
 fileInput.addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  uploadBanner.className = "banner";
-  uploadBanner.textContent = "⏳ Analyzing uploaded clip…";
+  liveBanner.className = "banner";
+  liveBanner.textContent = "⏳ Analyzing uploaded clip…";
   ensureUploadAudioGraph();
   uploadAudio.src = URL.createObjectURL(file);
   uploadAudio.style.display = "block";
@@ -955,14 +912,14 @@ fileInput.addEventListener("change", async (e) => {
     const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
     await classifyAudioBuffer(audioBuffer);
   } catch (err) {
-    uploadBanner.className = "banner alert";
-    uploadBanner.textContent = `🚫 Could not decode audio file: ${err.message}`;
+    liveBanner.className = "banner alert";
+    liveBanner.textContent = `🚫 Could not decode audio file: ${err.message}`;
   } finally {
     ctx.close();
   }
 });
 
-// ---- Export / clear (shared across both tabs -- one log, two views) ----
+// ---- Export / clear ----
 function exportLog() {
   if (log.length === 0) {
     alert("No log entries yet — let the monitor run for a few seconds first, or try the demo sound.");
@@ -983,15 +940,12 @@ function clearLog() {
   log = [];
   alertsCount = 0;
   inferCount = 0;
-  logBody.innerHTML = '<tr class="empty-state"><td colspan="5">No detections yet — click Start microphone above.</td></tr>';
-  uploadLogBody.innerHTML = '<tr class="empty-state"><td colspan="5">No detections yet — try the demo sound or upload a clip.</td></tr>';
+  logBody.innerHTML = '<tr class="empty-state"><td colspan="5">No detections yet — start the microphone or try the demo sound.</td></tr>';
   updateStats();
 }
 
 exportBtn.addEventListener("click", exportLog);
-uploadExportBtn.addEventListener("click", exportLog);
 clearBtn.addEventListener("click", clearLog);
-uploadClearBtn.addEventListener("click", clearLog);
 
 setInterval(updateStats, 1000);
 </script>
