@@ -205,6 +205,16 @@
       </div>
     </div>
     <div id="uploadBars"></div>
+    <div class="row">
+      <button class="secondary" id="uploadExportBtn">Export CSV</button>
+      <button class="secondary" id="uploadClearBtn">Clear log</button>
+    </div>
+    <div class="log-scroll">
+      <table>
+        <thead><tr><th>Time</th><th>Top label</th><th>Confidence</th><th>Deviation</th><th>Alert</th></tr></thead>
+        <tbody id="uploadLogBody"><tr class="empty-state"><td colspan="5">No detections yet — try the demo sound or upload a clip.</td></tr></tbody>
+      </table>
+    </div>
   </div>
 
   <div class="tab-panel card" id="tab-settings">
@@ -287,11 +297,14 @@ const liveBanner = document.getElementById("liveBanner");
 const liveBars = document.getElementById("liveBars");
 const liveStats = document.getElementById("liveStats");
 const logBody = document.getElementById("logBody");
+const uploadLogBody = document.getElementById("uploadLogBody");
 const uploadBanner = document.getElementById("uploadBanner");
 const uploadBars = document.getElementById("uploadBars");
 const uploadAudio = document.getElementById("uploadAudio");
 const exportBtn = document.getElementById("exportBtn");
 const clearBtn = document.getElementById("clearBtn");
+const uploadExportBtn = document.getElementById("uploadExportBtn");
+const uploadClearBtn = document.getElementById("uploadClearBtn");
 const thresholdEl = document.getElementById("threshold");
 const thresholdVal = document.getElementById("thresholdVal");
 const alertLabelsEl = document.getElementById("alertLabels");
@@ -373,13 +386,17 @@ function addLogRow(ts, label, score, devPct, isAlert) {
   const devText = devPct === null ? "\u2014" : `${devPct.toFixed(0)}%`;
   log.unshift([ts, label, score.toFixed(2), devText, isAlert ? "YES" : ""]);
   log = log.slice(0, MAX_LOG_ROWS);
-  const emptyRow = logBody.querySelector(".empty-state");
-  if (emptyRow) emptyRow.remove();
-  const tr = document.createElement("tr");
-  if (isAlert) tr.className = "alert-row";
-  tr.innerHTML = `<td>${ts}</td><td>${label}</td><td>${score.toFixed(2)}</td><td>${devText}</td><td>${isAlert ? "YES" : ""}</td>`;
-  logBody.prepend(tr);
-  while (logBody.rows.length > MAX_LOG_ROWS) logBody.deleteRow(-1);
+
+  const rowHtml = `<td>${ts}</td><td>${label}</td><td>${score.toFixed(2)}</td><td>${devText}</td><td>${isAlert ? "YES" : ""}</td>`;
+  for (const tbody of [logBody, uploadLogBody]) {
+    const emptyRow = tbody.querySelector(".empty-state");
+    if (emptyRow) emptyRow.remove();
+    const tr = document.createElement("tr");
+    if (isAlert) tr.className = "alert-row";
+    tr.innerHTML = rowHtml;
+    tbody.prepend(tr);
+    while (tbody.rows.length > MAX_LOG_ROWS) tbody.deleteRow(-1);
+  }
 }
 
 function updateStats() {
@@ -835,6 +852,7 @@ async function classifyAudioBuffer(audioBuffer) {
   const top = results[0];
   updateBanner(uploadBanner, isAlert, false, top.label, top.score, null);
   renderBars(uploadBars, results);
+  addLogRow(new Date().toLocaleTimeString(), top.label, top.score, null, isAlert);
 }
 
 function makeDemoBuffer(ctx) {
@@ -934,10 +952,10 @@ fileInput.addEventListener("change", async (e) => {
   }
 });
 
-// ---- Export / clear ----
-exportBtn.addEventListener("click", () => {
+// ---- Export / clear (shared across both tabs -- one log, two views) ----
+function exportLog() {
   if (log.length === 0) {
-    alert("No log entries yet — let the monitor run for a few seconds first.");
+    alert("No log entries yet — let the monitor run for a few seconds first, or try the demo sound.");
     return;
   }
   const header = "time,top_label,confidence,baseline_deviation,alert\n";
@@ -949,15 +967,21 @@ exportBtn.addEventListener("click", () => {
   a.download = `acoustic_events_${Date.now()}.csv`;
   a.click();
   URL.revokeObjectURL(url);
-});
+}
 
-clearBtn.addEventListener("click", () => {
+function clearLog() {
   log = [];
   alertsCount = 0;
   inferCount = 0;
   logBody.innerHTML = '<tr class="empty-state"><td colspan="5">No detections yet — click Start microphone above.</td></tr>';
+  uploadLogBody.innerHTML = '<tr class="empty-state"><td colspan="5">No detections yet — try the demo sound or upload a clip.</td></tr>';
   updateStats();
-});
+}
+
+exportBtn.addEventListener("click", exportLog);
+uploadExportBtn.addEventListener("click", exportLog);
+clearBtn.addEventListener("click", clearLog);
+uploadClearBtn.addEventListener("click", clearLog);
 
 setInterval(updateStats, 1000);
 </script>
