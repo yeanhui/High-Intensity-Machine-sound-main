@@ -51,7 +51,7 @@ so nothing is duplicated or hidden in a separate tab.
 
 | Element | What it shows |
 |---|---|
-| Microphone / Demo / Upload | Start the mic, click the demo sound, or upload a clip — whichever is currently playing drives everything below |
+| Microphone / Demo / Upload | Start the mic, pick a clip from the demo dropdown (a synthetic healthy/fault loop or one of three bundled real machine-sound samples in [`samples/`](samples)) and click "Demo machine sound", or upload your own clip — whichever is currently playing drives everything below |
 | Live spectrum / spectrogram | Real-time frequency bars + scrolling waterfall spectrogram (direct signal read, independent of the AI model) |
 | Healthy baseline + deviation alert | Capture a spectral "fingerprint" from either the mic or a playing clip; a live deviation % flags abnormal sounds even outside the AI model's labels (simple unsupervised anomaly detection) |
 | Top sound classes | Confidence bars (0–100%) per class, not just a single tag |

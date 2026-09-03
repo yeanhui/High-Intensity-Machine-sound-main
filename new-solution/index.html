@@ -158,7 +158,20 @@
       <span class="stats" id="liveStats">Session stats — inferences: 0 · alerts: 0 · elapsed: 0s</span>
     </div>
     <div class="row">
+      <select id="demoSelect" disabled>
+        <option value="synthetic">Synthetic healthy → fault loop</option>
+        <option value="samples/alban_gogh-old-machine-184439.mp3">Old machine hum (Alban Gogh)</option>
+        <option value="samples/freesound_community-cnc-machine-02-76600.mp3">CNC machine (Freesound Community)</option>
+        <option value="samples/hasin2004-machine-working-sound-244256.mp3">Machine working sound (hasin2004)</option>
+      </select>
       <button id="demoBtn" disabled>▶️ Demo machine sound</button>
+    </div>
+    <div class="stats" id="demoHint">No real machine handy? Pick a clip above and click "Demo machine sound" — it
+      loops continuously. The synthetic option alternates a healthy hum with a simulated fault (rattle/knocking)
+      every few seconds; a quick way to try "Set healthy baseline": start the demo, click "Set healthy baseline"
+      while it sounds normal, then watch the deviation % react to what plays next.</div>
+    <div class="row">
+      <span class="stats">Or analyze your own file:</span>
       <input type="file" id="fileInput" accept="audio/*" disabled />
     </div>
     <audio id="uploadAudio" controls style="display:none"></audio>
@@ -237,7 +250,9 @@
         computes a <strong>baseline deviation %</strong> — a simple, unsupervised anomaly score independent of
         the AI labels — and can trigger its own alert (threshold in Settings). This is how the app can flag
         "something sounds different" even for sounds AudioSet has no specific category for (e.g. a developing
-        mechanical fault).</li>
+        mechanical fault). The built-in <strong>demo machine sound</strong> loops between a healthy hum and a
+        simulated fault (extra harmonics, hiss and knocking) every few seconds, so this feature can be tried
+        without a real machine or microphone.</li>
     </ul>
     <h3>Limitations</h3>
     <ul>
@@ -284,6 +299,7 @@ const thresholdVal = document.getElementById("thresholdVal");
 const alertLabelsEl = document.getElementById("alertLabels");
 const baselineBtn = document.getElementById("baselineBtn");
 const baselineStat = document.getElementById("baselineStat");
+const demoSelect = document.getElementById("demoSelect");
 const devThresholdEl = document.getElementById("devThreshold");
 const devThresholdVal = document.getElementById("devThresholdVal");
 
@@ -320,6 +336,8 @@ let rollingBuffer = new Float32Array(0);
 let lastInferTime = 0;
 let micRunning = false;
 let micWarmupUntil = 0; // Date.now() timestamp; baseline capture from the mic is ignored until then
+let demoRunning = false;
+let demoRollingBuffer = new Float32Array(0);
 
 const specBarsCanvas = document.getElementById("specBars");
 const specWaterfallCanvas = document.getElementById("specWaterfall");
@@ -641,6 +659,7 @@ worker.onmessage = (e) => {
     modelStatus.textContent = "✅ Model loaded — ready to classify.";
     micBtn.disabled = false;
     demoBtn.disabled = false;
+    demoSelect.disabled = false;
     fileInput.disabled = false;
     baselineBtn.disabled = false;
   } else if (type === "result") {
@@ -687,6 +706,23 @@ function updateBanner(bannerEl, isLabelAlert, isDevAlert, topLabel, topScore, de
   }
 }
 
+// Shared by the mic and the continuous demo-loop classifier: applies one inference result to
+// the banner, bars, log and session stats.
+function reportClassification(results) {
+  inferCount++;
+  const threshold = getThreshold();
+  const alertLabels = getAlertLabels();
+  const isLabelAlert = checkAlert(results, threshold, alertLabels);
+  const isDevAlert = healthyBaseline !== null && currentDevPct !== null && currentDevPct >= getDevThreshold();
+  if (isLabelAlert || isDevAlert) alertsCount++;
+
+  const top = results[0];
+  updateBanner(liveBanner, isLabelAlert, isDevAlert, top.label, top.score, currentDevPct);
+  renderBars(liveBars, results);
+  addLogRow(new Date().toLocaleTimeString(), top.label, top.score, currentDevPct, isLabelAlert || isDevAlert);
+  updateStats();
+}
+
 // ---- Live microphone ----
 async function startMic() {
   try {
@@ -725,18 +761,7 @@ async function startMic() {
     const bufferSnapshot = rollingBuffer.slice();
     classify(bufferSnapshot).then((results) => {
       if (!micRunning) return; // mic was stopped while this classification was in flight
-      inferCount++;
-      const threshold = getThreshold();
-      const alertLabels = getAlertLabels();
-      const isLabelAlert = checkAlert(results, threshold, alertLabels);
-      const isDevAlert = healthyBaseline !== null && currentDevPct !== null && currentDevPct >= getDevThreshold();
-      if (isLabelAlert || isDevAlert) alertsCount++;
-
-      const top = results[0];
-      updateBanner(liveBanner, isLabelAlert, isDevAlert, top.label, top.score, currentDevPct);
-      renderBars(liveBars, results);
-      addLogRow(new Date().toLocaleTimeString(), top.label, top.score, currentDevPct, isLabelAlert || isDevAlert);
-      updateStats();
+      reportClassification(results);
     }).catch((err) => console.error("Classification error:", err));
   };
 
@@ -803,6 +828,7 @@ baselineBtn.addEventListener("click", () => {
 // AnalyserNode so both work independently, and can be combined via getActiveAnalyser()).
 let uploadAudioCtx = null;
 let uploadAnalyser = null;
+let uploadProcessorNode = null;
 
 function ensureUploadAudioGraph() {
   if (uploadAudioCtx) return;
@@ -813,6 +839,34 @@ function ensureUploadAudioGraph() {
   const source = uploadAudioCtx.createMediaElementSource(uploadAudio);
   source.connect(uploadAnalyser);
   uploadAnalyser.connect(uploadAudioCtx.destination);
+
+  // Silent tap used only while the looping demo clip is playing, so it can be classified
+  // continuously (like the live mic) instead of just once -- this is what lets "Set healthy
+  // baseline" be exercised against both the healthy and fault portions of the loop.
+  uploadProcessorNode = uploadAudioCtx.createScriptProcessor(4096, 1, 1);
+  source.connect(uploadProcessorNode);
+  uploadProcessorNode.connect(uploadAudioCtx.destination);
+  uploadProcessorNode.onaudioprocess = (e) => {
+    if (!demoRunning) return;
+    const chunk = e.inputBuffer.getChannelData(0);
+    const chunk16k = resampleLinear(chunk, uploadAudioCtx.sampleRate, TARGET_SR);
+
+    const maxLen = Math.floor(TARGET_SR * WINDOW_SECONDS);
+    const combined = new Float32Array(demoRollingBuffer.length + chunk16k.length);
+    combined.set(demoRollingBuffer);
+    combined.set(chunk16k, demoRollingBuffer.length);
+    demoRollingBuffer = combined.length > maxLen ? combined.slice(combined.length - maxLen) : combined;
+
+    const now = Date.now();
+    if (now - lastInferTime < MIN_INFER_INTERVAL_MS || demoRollingBuffer.length < TARGET_SR * 0.5) return;
+    lastInferTime = now;
+
+    const bufferSnapshot = demoRollingBuffer.slice();
+    classify(bufferSnapshot).then((results) => {
+      if (!demoRunning) return;
+      reportClassification(results);
+    }).catch((err) => console.error("Classification error:", err));
+  };
 }
 
 uploadAudio.addEventListener("play", () => {
@@ -838,21 +892,46 @@ async function classifyAudioBuffer(audioBuffer) {
   addLogRow(new Date().toLocaleTimeString(), top.label, top.score, devPct, isLabelAlert || isDevAlert);
 }
 
+// Builds a looping synthetic "machine" clip: alternating HEALTHY (steady hum) and FAULT
+// (extra high harmonics + tremolo noise + periodic knocking) phases. This lets "Set healthy
+// baseline" be exercised end-to-end without a real device: capture the baseline during a
+// healthy phase, then watch the deviation % climb once the next fault phase starts.
+const DEMO_PHASE_SEC = 4; // duration of each healthy/fault phase, in seconds
+const DEMO_CYCLES = 3;    // number of healthy->fault repetitions baked into the generated clip
+
 function makeDemoBuffer(ctx) {
-  const durationSec = 4.0;
   const sr = ctx.sampleRate;
-  const buffer = ctx.createBuffer(1, sr * durationSec, sr);
+  const durationSec = DEMO_PHASE_SEC * 2 * DEMO_CYCLES;
+  const buffer = ctx.createBuffer(1, Math.round(sr * durationSec), sr);
   const data = buffer.getChannelData(0);
-  const base = 90.0;
+  const base = 90.0; // Hz, fundamental "motor hum" frequency
+  const clickPeriod = Math.round(sr * 0.18); // ~5.5 mechanical "knocks" per second during a fault
+  const clickTau = 0.008; // seconds, how fast each knock decays
+
   for (let i = 0; i < data.length; i++) {
     const t = i / sr;
+    const isFault = (t % (DEMO_PHASE_SEC * 2)) >= DEMO_PHASE_SEC;
+
     let s =
       0.6 * Math.sin(2 * Math.PI * base * t) +
       0.3 * Math.sin(2 * Math.PI * base * 2 * t) +
       0.15 * Math.sin(2 * Math.PI * base * 3 * t) +
       0.05 * (Math.random() * 2 - 1);
+
+    if (isFault) {
+      // Higher harmonics + amplitude-modulated hiss shift the spectral shape away from the
+      // healthy fingerprint; the knock train adds a periodic broadband transient on top.
+      s += 0.12 * Math.sin(2 * Math.PI * base * 5 * t);
+      s += 0.08 * Math.sin(2 * Math.PI * base * 7 * t);
+      const tremolo = 0.5 + 0.5 * Math.sin(2 * Math.PI * 10 * t);
+      s += 0.25 * tremolo * (Math.random() * 2 - 1);
+      const clickPos = i % clickPeriod;
+      s += 0.5 * Math.exp(-(clickPos / sr) / clickTau);
+    }
+
     data[i] = s;
   }
+
   let max = 0;
   for (let i = 0; i < data.length; i++) max = Math.max(max, Math.abs(data[i]));
   for (let i = 0; i < data.length; i++) data[i] /= max || 1;
@@ -896,20 +975,45 @@ function audioBufferToWavBlob(buffer) {
   return new Blob([arrayBuffer], { type: "audio/wav" });
 }
 
-demoBtn.addEventListener("click", async () => {
-  liveBanner.className = "banner";
-  liveBanner.textContent = "⏳ Playing and analyzing demo sound…";
+function startDemo() {
   ensureUploadAudioGraph();
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const buffer = makeDemoBuffer(ctx);
+  demoRunning = true;
+  demoRollingBuffer = new Float32Array(0);
+  liveBanner.className = "banner";
 
-  const wavBlob = audioBufferToWavBlob(buffer);
-  uploadAudio.src = URL.createObjectURL(wavBlob);
+  const choice = demoSelect.value;
+  if (choice === "synthetic") {
+    liveBanner.textContent =
+      `⏳ Playing demo machine sound — healthy hum, then a simulated fault every ${DEMO_PHASE_SEC}s (loops). ` +
+      "Try clicking \"Set healthy baseline\" during a healthy stretch, then watch the deviation rise.";
+    const buffer = makeDemoBuffer(uploadAudioCtx);
+    const wavBlob = audioBufferToWavBlob(buffer);
+    uploadAudio.src = URL.createObjectURL(wavBlob);
+  } else {
+    liveBanner.textContent =
+      `⏳ Playing sample: ${demoSelect.selectedOptions[0].textContent} (loops). ` +
+      "Click \"Set healthy baseline\" while it sounds normal, then keep listening for any drift.";
+    uploadAudio.src = choice;
+  }
+  uploadAudio.loop = true;
   uploadAudio.style.display = "block";
   uploadAudio.play().catch(() => {});
 
-  await classifyAudioBuffer(buffer);
-  ctx.close();
+  demoBtn.textContent = "⏹ Stop demo";
+}
+
+function stopDemo() {
+  demoRunning = false;
+  uploadAudio.pause();
+  uploadAudio.loop = false;
+  uploadAudio.currentTime = 0;
+  demoRollingBuffer = new Float32Array(0);
+  demoBtn.textContent = "▶️ Demo machine sound";
+  liveBanner.textContent = "⏸ Demo stopped.";
+}
+
+demoBtn.addEventListener("click", () => {
+  if (demoRunning) stopDemo(); else startDemo();
 });
 
 fileInput.addEventListener("change", async (e) => {
