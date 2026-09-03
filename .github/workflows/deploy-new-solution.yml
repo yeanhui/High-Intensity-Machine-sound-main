@@ -84,6 +84,10 @@ jobs:
           cp -r new-solution/. /tmp/space-deploy/
           cd /tmp/space-deploy
           git init -b main
+          git lfs install --local
+          # HF's git server rejects binary blobs pushed as regular git objects (pre-receive hook);
+          # audio/image/model assets must go through Git LFS instead.
+          git lfs track "*.mp3" "*.wav" "*.png" "*.jpg" "*.jpeg"
           git -c user.name="github-actions" -c user.email="actions@github.com" add -A
           git -c user.name="github-actions" -c user.email="actions@github.com" \
             commit -m "Deploy $(date -u +%Y-%m-%dT%H:%M:%SZ)"
