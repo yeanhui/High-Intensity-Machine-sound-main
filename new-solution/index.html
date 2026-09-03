@@ -412,12 +412,54 @@ function makeDemoBuffer(ctx) {
   return buffer;
 }
 
+function audioBufferToWavBlob(buffer) {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const data = buffer.getChannelData(0);
+  const bytesPerSample = 2;
+  const blockAlign = numChannels * bytesPerSample;
+  const dataSize = data.length * blockAlign;
+  const arrayBuffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(arrayBuffer);
+
+  const writeString = (offset, str) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bytesPerSample * 8, true);
+  writeString(36, "data");
+  view.setUint32(40, dataSize, true);
+
+  let offset = 44;
+  for (let i = 0; i < data.length; i++) {
+    const s = Math.max(-1, Math.min(1, data[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    offset += 2;
+  }
+  return new Blob([arrayBuffer], { type: "audio/wav" });
+}
+
 demoBtn.addEventListener("click", async () => {
   uploadBanner.className = "banner";
-  uploadBanner.textContent = "⏳ Analyzing demo sound…";
+  uploadBanner.textContent = "⏳ Playing and analyzing demo sound…";
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const buffer = makeDemoBuffer(ctx);
-  uploadAudio.style.display = "none";
+
+  const wavBlob = audioBufferToWavBlob(buffer);
+  uploadAudio.src = URL.createObjectURL(wavBlob);
+  uploadAudio.style.display = "block";
+  uploadAudio.play().catch(() => {});
+
   await classifyAudioBuffer(buffer);
   ctx.close();
 });
