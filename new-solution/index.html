@@ -96,9 +96,10 @@
   .viz-col { flex: 1; min-width: 260px; }
   .viz-label { font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
   .viz-col canvas {
-    width: 100%; height: 200px; background: #0d0f17; border-radius: 10px; display: block;
+    width: 100%; height: 220px; background: #0d0f17; border-radius: 10px; display: block;
     box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
   }
+  .viz-caption { font-size: 0.76rem; color: var(--muted); margin-top: 6px; }
 
   h3 { font-size: 1.02rem; margin: 0 0 10px; }
   .tab-panel ul { padding-left: 20px; margin: 0 0 18px; }
@@ -140,11 +141,13 @@
     <div class="viz-row">
       <div class="viz-col">
         <div class="viz-label">Live spectrum</div>
-        <canvas id="specBars" width="760" height="200"></canvas>
+        <canvas id="specBars" width="1200" height="260"></canvas>
+        <div class="viz-caption">X-axis: frequency, log scale (40&nbsp;Hz&ndash;12&nbsp;kHz). Dashed gold line = spectral centroid (higher = "brighter"/higher-pitched sound).</div>
       </div>
       <div class="viz-col">
         <div class="viz-label">Spectrogram (last ~8s)</div>
-        <canvas id="specWaterfall" width="760" height="200"></canvas>
+        <canvas id="specWaterfall" width="1200" height="260"></canvas>
+        <div class="viz-caption">Time flows left&rarr;right. Left axis: frequency, log scale (top = 12&nbsp;kHz, bottom = 40&nbsp;Hz). Brighter color = louder at that frequency.</div>
       </div>
     </div>
     <div id="liveBars"></div>
@@ -355,6 +358,8 @@ function resampleLinear(input, fromRate, toRate) {
 // it into the left few percent of the chart.
 const VIZ_FMIN = 40;   // Hz, low end of the displayed range
 const VIZ_FMAX = 12000; // Hz, high end of the displayed range (covers audible machine sounds)
+const VIZ_TICKS = [50, 100, 200, 500, 1000, 2000, 5000, 10000]; // Hz, axis reference lines
+let waterfallAxisW = 0; // px reserved on the left of the spectrogram for frequency labels
 
 function heatColor(value) {
   // value 0-255 -> dark blue (quiet) through purple/red to yellow (loud)
@@ -374,33 +379,130 @@ function logFreqAt(t) {
   return VIZ_FMIN * Math.pow(VIZ_FMAX / VIZ_FMIN, t);
 }
 
+function freqToT(freq) {
+  // inverse of logFreqAt: frequency -> t in [0, 1]
+  const clamped = Math.max(VIZ_FMIN, Math.min(VIZ_FMAX, freq));
+  return Math.log(clamped / VIZ_FMIN) / Math.log(VIZ_FMAX / VIZ_FMIN);
+}
+
+function formatHz(freq) {
+  if (freq < 1000) return `${Math.round(freq)}`;
+  const k = freq / 1000;
+  return `${Number.isInteger(k) ? k.toFixed(0) : k.toFixed(1)}k`;
+}
+
+function computeCentroidHz(freqData, sampleRate) {
+  const nyquist = sampleRate / 2;
+  let num = 0, den = 0;
+  for (let i = 0; i < freqData.length; i++) {
+    const freq = (i / freqData.length) * nyquist;
+    const mag = freqData[i];
+    num += freq * mag;
+    den += mag;
+  }
+  return den > 0 ? num / den : 0;
+}
+
 function drawSpectrumBars(freqData, sampleRate) {
   const ctx = specBarsCanvas.getContext("2d");
   const w = specBarsCanvas.width, h = specBarsCanvas.height;
+  const axisH = Math.round(h * 0.14);
+  const plotH = h - axisH;
+
   ctx.fillStyle = "#10121a";
   ctx.fillRect(0, 0, w, h);
-  const barCount = 72;
+
+  const barCount = 96;
   const barWidth = w / barCount;
   for (let i = 0; i < barCount; i++) {
     const freq = logFreqAt(i / (barCount - 1));
     const bin = freqToBin(freq, sampleRate, freqData.length);
     const value = freqData[bin];
-    const barHeight = (value / 255) * h;
+    const barHeight = (value / 255) * plotH;
     ctx.fillStyle = heatColor(value);
-    ctx.fillRect(i * barWidth, h - barHeight, Math.max(1, barWidth - 1), barHeight);
+    ctx.fillRect(i * barWidth, plotH - barHeight, Math.max(1, barWidth - 1), barHeight);
   }
+
+  // Frequency axis: gridlines + labels
+  ctx.strokeStyle = "rgba(255,255,255,0.12)";
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.font = `${Math.round(h * 0.045)}px -apple-system, Segoe UI, sans-serif`;
+  ctx.textAlign = "center";
+  for (const freq of VIZ_TICKS) {
+    const x = freqToT(freq) * w;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, plotH);
+    ctx.stroke();
+    ctx.fillText(formatHz(freq), x, h - axisH * 0.25);
+  }
+
+  // Spectral centroid marker (tonal "brightness" of the current sound)
+  const centroidHz = computeCentroidHz(freqData, sampleRate);
+  if (centroidHz > 0) {
+    const cx = freqToT(centroidHz) * w;
+    ctx.strokeStyle = "#f5c542";
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(cx, 0);
+    ctx.lineTo(cx, plotH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#f5c542";
+    ctx.textAlign = cx > w * 0.7 ? "right" : "left";
+    ctx.font = `${Math.round(h * 0.055)}px -apple-system, Segoe UI, sans-serif`;
+    ctx.fillText(`centroid ${formatHz(centroidHz)}Hz`, cx + (cx > w * 0.7 ? -6 : 6), Math.round(h * 0.07));
+  }
+}
+
+function initWaterfallAxis() {
+  const ctx = specWaterfallCanvas.getContext("2d");
+  const w = specWaterfallCanvas.width, h = specWaterfallCanvas.height;
+  waterfallAxisW = Math.round(w * 0.07);
+
+  ctx.fillStyle = "#0d0f17";
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.font = `${Math.round(h * 0.045)}px -apple-system, Segoe UI, sans-serif`;
+  ctx.textAlign = "left";
+  const labelFreqs = [12000, 5000, 2000, 1000, 500, 200, 100, 40];
+  for (const freq of labelFreqs) {
+    const y = (1 - freqToT(freq)) * h;
+    ctx.fillText(formatHz(freq), 4, Math.min(h - 4, Math.max(10, y)));
+  }
+  ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  ctx.beginPath();
+  ctx.moveTo(waterfallAxisW, 0);
+  ctx.lineTo(waterfallAxisW, h);
+  ctx.stroke();
 }
 
 function drawWaterfallColumn(freqData, sampleRate) {
   const ctx = specWaterfallCanvas.getContext("2d");
   const w = specWaterfallCanvas.width, h = specWaterfallCanvas.height;
-  ctx.drawImage(specWaterfallCanvas, -1, 0);
+  const plotX = waterfallAxisW + 1;
+  const plotW = w - plotX;
+
+  // Shift only the heatmap region left by 1px -- the axis label strip is never touched,
+  // so it stays perfectly sharp instead of smearing every frame.
+  ctx.drawImage(specWaterfallCanvas, plotX + 1, 0, plotW - 1, h, plotX, 0, plotW - 1, h);
+
   for (let y = 0; y < h; y++) {
-    const freq = logFreqAt((h - 1 - y) / (h - 1)); // top of canvas = high frequency
+    const freq = logFreqAt(1 - y / (h - 1)); // top of canvas = high frequency
     const bin = freqToBin(freq, sampleRate, freqData.length);
     ctx.fillStyle = heatColor(freqData[bin] || 0);
     ctx.fillRect(w - 1, y, 1, 1);
   }
+}
+
+function sizeCanvasToDisplay(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const w = Math.max(300, Math.round(rect.width * dpr));
+  const h = Math.max(150, Math.round(rect.height * dpr));
+  canvas.width = w;
+  canvas.height = h;
 }
 
 function vizLoop() {
@@ -516,6 +618,9 @@ async function startMic() {
   micRunning = true;
   micBtn.textContent = "⏹ Stop microphone";
   liveBanner.textContent = "⏳ Listening…";
+  sizeCanvasToDisplay(specBarsCanvas);
+  sizeCanvasToDisplay(specWaterfallCanvas);
+  initWaterfallAxis();
   vizLoop();
 }
 
