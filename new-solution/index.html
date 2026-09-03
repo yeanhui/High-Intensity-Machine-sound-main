@@ -231,9 +231,11 @@
     </div>
     <div class="setting-group">
       <label for="devThreshold">Baseline deviation alert threshold: <span class="setting-value" id="devThresholdVal">30%</span></label>
-      <p class="setting-help">After clicking "Set healthy baseline" on the Live tab, an alert also fires if the
-        live spectrum drifts this far from the saved baseline shape — independent of the AI labels. Useful for
-        catching abnormal sounds the model doesn't have a specific category for.</p>
+      <p class="setting-help">After clicking "Set healthy baseline" on the Live tab (requires the microphone to be
+        running), an alert also fires — on both the Live and Upload/Demo tabs — if the spectrum drifts this far
+        from the saved baseline shape, independent of the AI labels. Useful for catching abnormal sounds the
+        model doesn't have a specific category for. No baseline captured yet = this check is skipped entirely
+        (shown as "—" in the log).</p>
       <input type="range" id="devThreshold" min="5" max="80" step="1" value="30" style="width: 100%; max-width: 320px" />
     </div>
   </div>
@@ -819,6 +821,12 @@ function uploadVizLoop() {
   uploadAnalyser.getByteFrequencyData(freqData);
   drawSpectrumBars(uploadSpecBarsCanvas, freqData, uploadAudioCtx.sampleRate);
   drawWaterfallColumn(uploadSpecWaterfallCanvas, freqData, uploadAudioCtx.sampleRate);
+
+  if (healthyBaseline) {
+    const bars = sampleLogBars(freqData, uploadAudioCtx.sampleRate, BASELINE_BAR_COUNT);
+    currentDevPct = computeDeviationPct(bars, healthyBaseline);
+  }
+
   uploadVizRafId = requestAnimationFrame(uploadVizLoop);
 }
 
@@ -848,11 +856,13 @@ async function classifyAudioBuffer(audioBuffer) {
   const results = await classify(audio16k);
   const threshold = getThreshold();
   const alertLabels = getAlertLabels();
-  const isAlert = checkAlert(results, threshold, alertLabels);
+  const isLabelAlert = checkAlert(results, threshold, alertLabels);
+  const devPct = healthyBaseline ? currentDevPct : null;
+  const isDevAlert = healthyBaseline !== null && devPct !== null && devPct >= getDevThreshold();
   const top = results[0];
-  updateBanner(uploadBanner, isAlert, false, top.label, top.score, null);
+  updateBanner(uploadBanner, isLabelAlert, isDevAlert, top.label, top.score, devPct);
   renderBars(uploadBars, results);
-  addLogRow(new Date().toLocaleTimeString(), top.label, top.score, null, isAlert);
+  addLogRow(new Date().toLocaleTimeString(), top.label, top.score, devPct, isLabelAlert || isDevAlert);
 }
 
 function makeDemoBuffer(ctx) {
