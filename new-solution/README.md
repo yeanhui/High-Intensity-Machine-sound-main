@@ -55,7 +55,7 @@ CDN on first load and is cached by the browser afterward.
 | Event log | Timestamped table of the top detection, confidence, and baseline deviation each cycle, newest first |
 | Export CSV | Downloads the full session log |
 | Settings | Alert confidence threshold, alert-keyword list, and baseline deviation alert threshold |
-| Upload / Demo tab | Analyze an uploaded clip or the bundled demo sound — works with zero microphone access |
+| Upload / Demo tab | Analyze an uploaded clip or the bundled demo sound — works with zero microphone access, and shows its own live spectrum/spectrogram synced to playback |
 
 ## Data / model used
 

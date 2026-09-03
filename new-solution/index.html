@@ -192,6 +192,18 @@
     </div>
     <audio id="uploadAudio" controls style="display:none"></audio>
     <div class="banner" id="uploadBanner"></div>
+    <div class="viz-row">
+      <div class="viz-col">
+        <div class="viz-label">Live spectrum</div>
+        <canvas id="uploadSpecBars" width="1200" height="260"></canvas>
+        <div class="viz-caption">Updates while the clip plays. X-axis: frequency, log scale (40&nbsp;Hz&ndash;12&nbsp;kHz). Dashed gold line = spectral centroid.</div>
+      </div>
+      <div class="viz-col">
+        <div class="viz-label">Spectrogram</div>
+        <canvas id="uploadSpecWaterfall" width="1200" height="260"></canvas>
+        <div class="viz-caption">Time flows left&rarr;right as the clip plays. Left axis: frequency, log scale. Brighter = louder.</div>
+      </div>
+    </div>
     <div id="uploadBars"></div>
   </div>
 
@@ -323,6 +335,8 @@ let micRunning = false;
 
 const specBarsCanvas = document.getElementById("specBars");
 const specWaterfallCanvas = document.getElementById("specWaterfall");
+const uploadSpecBarsCanvas = document.getElementById("uploadSpecBars");
+const uploadSpecWaterfallCanvas = document.getElementById("uploadSpecWaterfall");
 
 function getAlertLabels() {
   return alertLabelsEl.value.split(",").map((s) => s.trim()).filter(Boolean);
@@ -409,7 +423,7 @@ const VIZ_FMIN = 40;   // Hz, low end of the displayed range
 const VIZ_FMAX = 12000; // Hz, high end of the displayed range (covers audible machine sounds)
 const VIZ_TICKS = [50, 100, 200, 500, 1000, 2000, 5000, 10000]; // Hz, axis reference lines
 const BASELINE_BAR_COUNT = 96; // resolution of the spectral "fingerprint" used for baseline comparison
-let waterfallAxisW = 0; // px reserved on the left of the spectrogram for frequency labels
+const waterfallAxisMap = new Map(); // canvas -> px reserved on the left for frequency labels (per-canvas, since there are two independent spectrogram canvases)
 
 let healthyBaseline = null;   // Float32Array (0-1 normalized) captured spectral shape, or null
 let currentDevPct = null;     // latest % deviation from the baseline, or null if no baseline set
@@ -477,9 +491,9 @@ function computeDeviationPct(bars, baseline) {
   return (sum / bars.length) * 100;
 }
 
-function drawSpectrumBars(freqData, sampleRate) {
-  const ctx = specBarsCanvas.getContext("2d");
-  const w = specBarsCanvas.width, h = specBarsCanvas.height;
+function drawSpectrumBars(canvas, freqData, sampleRate) {
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
   const axisH = Math.round(h * 0.14);
   const plotH = h - axisH;
 
@@ -540,10 +554,11 @@ function drawSpectrumBars(freqData, sampleRate) {
   }
 }
 
-function initWaterfallAxis() {
-  const ctx = specWaterfallCanvas.getContext("2d");
-  const w = specWaterfallCanvas.width, h = specWaterfallCanvas.height;
-  waterfallAxisW = Math.round(w * 0.07);
+function initWaterfallAxis(canvas) {
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  const axisW = Math.round(w * 0.07);
+  waterfallAxisMap.set(canvas, axisW);
 
   ctx.fillStyle = "#0d0f17";
   ctx.fillRect(0, 0, w, h);
@@ -558,20 +573,21 @@ function initWaterfallAxis() {
   }
   ctx.strokeStyle = "rgba(255,255,255,0.15)";
   ctx.beginPath();
-  ctx.moveTo(waterfallAxisW, 0);
-  ctx.lineTo(waterfallAxisW, h);
+  ctx.moveTo(axisW, 0);
+  ctx.lineTo(axisW, h);
   ctx.stroke();
 }
 
-function drawWaterfallColumn(freqData, sampleRate) {
-  const ctx = specWaterfallCanvas.getContext("2d");
-  const w = specWaterfallCanvas.width, h = specWaterfallCanvas.height;
-  const plotX = waterfallAxisW + 1;
+function drawWaterfallColumn(canvas, freqData, sampleRate) {
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  const axisW = waterfallAxisMap.get(canvas) || 0;
+  const plotX = axisW + 1;
   const plotW = w - plotX;
 
   // Shift only the heatmap region left by 1px -- the axis label strip is never touched,
   // so it stays perfectly sharp instead of smearing every frame.
-  ctx.drawImage(specWaterfallCanvas, plotX + 1, 0, plotW - 1, h, plotX, 0, plotW - 1, h);
+  ctx.drawImage(canvas, plotX + 1, 0, plotW - 1, h, plotX, 0, plotW - 1, h);
 
   for (let y = 0; y < h; y++) {
     const freq = logFreqAt(1 - y / (h - 1)); // top of canvas = high frequency
@@ -594,8 +610,8 @@ function vizLoop() {
   if (!micRunning || !analyserNode) return;
   const freqData = new Uint8Array(analyserNode.frequencyBinCount);
   analyserNode.getByteFrequencyData(freqData);
-  drawSpectrumBars(freqData, audioCtx.sampleRate);
-  drawWaterfallColumn(freqData, audioCtx.sampleRate);
+  drawSpectrumBars(specBarsCanvas, freqData, audioCtx.sampleRate);
+  drawWaterfallColumn(specWaterfallCanvas, freqData, audioCtx.sampleRate);
 
   if (healthyBaseline) {
     const bars = sampleLogBars(freqData, audioCtx.sampleRate, BASELINE_BAR_COUNT);
@@ -717,7 +733,7 @@ async function startMic() {
   liveBanner.textContent = "⏳ Listening…";
   sizeCanvasToDisplay(specBarsCanvas);
   sizeCanvasToDisplay(specWaterfallCanvas);
-  initWaterfallAxis();
+  initWaterfallAxis(specWaterfallCanvas);
   vizLoop();
 
   // Warm-up guard: disable baseline capture for a couple of seconds so a startup click/pop
@@ -761,6 +777,51 @@ baselineBtn.addEventListener("click", () => {
 });
 
 // ---- Upload / Demo tab ----
+// Visualizes the demo/uploaded clip while it plays, by tapping the <audio> element's own
+// output with a MediaElementAudioSourceNode -> AnalyserNode (kept separate from the live-mic
+// AnalyserNode so both tabs work independently).
+let uploadAudioCtx = null;
+let uploadAnalyser = null;
+let uploadVizRafId = null;
+let uploadVizReady = false;
+
+function ensureUploadAudioGraph() {
+  if (uploadAudioCtx) return;
+  uploadAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  uploadAnalyser = uploadAudioCtx.createAnalyser();
+  uploadAnalyser.fftSize = 2048;
+  uploadAnalyser.smoothingTimeConstant = 0.6;
+  const source = uploadAudioCtx.createMediaElementSource(uploadAudio);
+  source.connect(uploadAnalyser);
+  uploadAnalyser.connect(uploadAudioCtx.destination);
+}
+
+function uploadVizLoop() {
+  if (uploadAudio.paused || uploadAudio.ended || !uploadAnalyser) return;
+  const freqData = new Uint8Array(uploadAnalyser.frequencyBinCount);
+  uploadAnalyser.getByteFrequencyData(freqData);
+  drawSpectrumBars(uploadSpecBarsCanvas, freqData, uploadAudioCtx.sampleRate);
+  drawWaterfallColumn(uploadSpecWaterfallCanvas, freqData, uploadAudioCtx.sampleRate);
+  uploadVizRafId = requestAnimationFrame(uploadVizLoop);
+}
+
+uploadAudio.addEventListener("play", () => {
+  if (!uploadVizReady) {
+    sizeCanvasToDisplay(uploadSpecBarsCanvas);
+    sizeCanvasToDisplay(uploadSpecWaterfallCanvas);
+    initWaterfallAxis(uploadSpecWaterfallCanvas);
+    uploadVizReady = true;
+  }
+  if (uploadAudioCtx && uploadAudioCtx.state === "suspended") uploadAudioCtx.resume();
+  if (uploadVizRafId) cancelAnimationFrame(uploadVizRafId);
+  uploadVizLoop();
+});
+["pause", "ended"].forEach((evt) =>
+  uploadAudio.addEventListener(evt, () => {
+    if (uploadVizRafId) cancelAnimationFrame(uploadVizRafId);
+  })
+);
+
 async function classifyAudioBuffer(audioBuffer) {
   const channelData = [];
   for (let c = 0; c < audioBuffer.numberOfChannels; c++) channelData.push(audioBuffer.getChannelData(c));
@@ -837,6 +898,7 @@ function audioBufferToWavBlob(buffer) {
 demoBtn.addEventListener("click", async () => {
   uploadBanner.className = "banner";
   uploadBanner.textContent = "⏳ Playing and analyzing demo sound…";
+  ensureUploadAudioGraph();
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const buffer = makeDemoBuffer(ctx);
 
@@ -854,8 +916,10 @@ fileInput.addEventListener("change", async (e) => {
   if (!file) return;
   uploadBanner.className = "banner";
   uploadBanner.textContent = "⏳ Analyzing uploaded clip…";
+  ensureUploadAudioGraph();
   uploadAudio.src = URL.createObjectURL(file);
   uploadAudio.style.display = "block";
+  uploadAudio.play().catch(() => {});
 
   const arrayBuffer = await file.arrayBuffer();
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
