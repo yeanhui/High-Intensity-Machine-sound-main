@@ -48,6 +48,7 @@ CDN on first load and is cached by the browser afterward.
 | Element | What it shows |
 |---|---|
 | Live microphone tab | Streaming mic audio classified ~once per second, entirely client-side |
+| Live spectrum / spectrogram | Real-time frequency bars + scrolling waterfall spectrogram (direct signal read, independent of the AI model) |
 | Top sound classes | Confidence bars (0–100%) per class, not just a single tag |
 | Alert banner | Turns red when a predicted label matches an "alert keyword" (Alarm, Siren, Explosion, …) above a confidence threshold |
 | Event log | Timestamped table of the top detection each cycle, newest first |

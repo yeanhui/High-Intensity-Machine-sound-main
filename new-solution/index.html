@@ -58,6 +58,10 @@
   details summary { cursor: pointer; font-weight: 600; }
   .status { color: #555; font-size: 0.9rem; margin: 6px 0; }
   audio { width: 100%; margin-top: 8px; }
+  .viz-row { display: flex; gap: 14px; flex-wrap: wrap; margin: 12px 0; }
+  .viz-col { flex: 1; min-width: 260px; }
+  .viz-label { font-size: 0.8rem; color: #555; margin-bottom: 4px; font-weight: 600; }
+  .viz-col canvas { width: 100%; height: 110px; background: #10121a; border-radius: 6px; display: block; }
 </style>
 </head>
 <body>
@@ -83,6 +87,16 @@
       <span class="stats" id="liveStats">Session stats — inferences: 0 · alerts: 0 · elapsed: 0s</span>
     </div>
     <div class="banner" id="liveBanner">⏳ Waiting for audio…</div>
+    <div class="viz-row">
+      <div class="viz-col">
+        <div class="viz-label">Live spectrum</div>
+        <canvas id="specBars" width="380" height="110"></canvas>
+      </div>
+      <div class="viz-col">
+        <div class="viz-label">Spectrogram (last ~8s)</div>
+        <canvas id="specWaterfall" width="380" height="110"></canvas>
+      </div>
+    </div>
     <div id="liveBars"></div>
     <div class="row">
       <button class="secondary" id="exportBtn">Export CSV</button>
@@ -140,6 +154,9 @@
         keywords (Alarm, Siren, Explosion, …) above the confidence threshold — both tunable in Settings.</li>
       <li>The <strong>event log</strong> keeps a timestamped history of the top detection each cycle;
         <strong>Export CSV</strong> downloads it.</li>
+      <li>The <strong>live spectrum</strong> and <strong>spectrogram</strong> panels are a direct read of
+        the microphone signal (via a Web Audio <code>AnalyserNode</code>) independent of the AI model —
+        useful for visually spotting tonal shifts, rattles, or sudden spikes at a glance.</li>
     </ul>
     <h3>Limitations</h3>
     <ul>
@@ -201,9 +218,14 @@ const startTime = Date.now();
 let audioCtx = null;
 let micStream = null;
 let processorNode = null;
+let analyserNode = null;
+let vizRafId = null;
 let rollingBuffer = new Float32Array(0);
 let lastInferTime = 0;
 let micRunning = false;
+
+const specBarsCanvas = document.getElementById("specBars");
+const specWaterfallCanvas = document.getElementById("specWaterfall");
 
 function getAlertLabels() {
   return alertLabelsEl.value.split(",").map((s) => s.trim()).filter(Boolean);
@@ -275,6 +297,50 @@ function resampleLinear(input, fromRate, toRate) {
   return output;
 }
 
+// ---- Live spectrum + scrolling spectrogram (visual aid, independent of the classifier) ----
+function heatColor(value) {
+  // value 0-255 -> dark blue (quiet) through purple/red to yellow (loud)
+  const hue = 260 - (value / 255) * 260;
+  const light = 8 + (value / 255) * 55;
+  return `hsl(${hue}, 100%, ${light}%)`;
+}
+
+function drawSpectrumBars(freqData) {
+  const ctx = specBarsCanvas.getContext("2d");
+  const w = specBarsCanvas.width, h = specBarsCanvas.height;
+  ctx.fillStyle = "#10121a";
+  ctx.fillRect(0, 0, w, h);
+  const barCount = 64;
+  const step = Math.floor(freqData.length / barCount);
+  const barWidth = w / barCount;
+  for (let i = 0; i < barCount; i++) {
+    const value = freqData[i * step];
+    const barHeight = (value / 255) * h;
+    ctx.fillStyle = heatColor(value);
+    ctx.fillRect(i * barWidth, h - barHeight, barWidth - 1, barHeight);
+  }
+}
+
+function drawWaterfallColumn(freqData) {
+  const ctx = specWaterfallCanvas.getContext("2d");
+  const w = specWaterfallCanvas.width, h = specWaterfallCanvas.height;
+  ctx.drawImage(specWaterfallCanvas, -1, 0);
+  for (let y = 0; y < h; y++) {
+    const binIndex = Math.floor(((h - y) / h) * freqData.length);
+    ctx.fillStyle = heatColor(freqData[binIndex] || 0);
+    ctx.fillRect(w - 1, y, 1, 1);
+  }
+}
+
+function vizLoop() {
+  if (!micRunning || !analyserNode) return;
+  const freqData = new Uint8Array(analyserNode.frequencyBinCount);
+  analyserNode.getByteFrequencyData(freqData);
+  drawSpectrumBars(freqData);
+  drawWaterfallColumn(freqData);
+  vizRafId = requestAnimationFrame(vizLoop);
+}
+
 // ---- Model loading (runs in a Web Worker so the UI thread stays responsive) ----
 const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
 let reqId = 0;
@@ -339,6 +405,11 @@ async function startMic() {
   const source = audioCtx.createMediaStreamSource(micStream);
   processorNode = audioCtx.createScriptProcessor(4096, 1, 1);
 
+  analyserNode = audioCtx.createAnalyser();
+  analyserNode.fftSize = 1024;
+  analyserNode.smoothingTimeConstant = 0.6;
+  source.connect(analyserNode);
+
   processorNode.onaudioprocess = (e) => {
     const chunk = e.inputBuffer.getChannelData(0);
     const chunk16k = resampleLinear(chunk, audioCtx.sampleRate, TARGET_SR);
@@ -374,12 +445,15 @@ async function startMic() {
   micRunning = true;
   micBtn.textContent = "⏹ Stop microphone";
   liveBanner.textContent = "⏳ Listening…";
+  vizLoop();
 }
 
 function stopMic() {
   if (processorNode) processorNode.disconnect();
+  if (analyserNode) analyserNode.disconnect();
   if (micStream) micStream.getTracks().forEach((t) => t.stop());
   if (audioCtx) audioCtx.close();
+  if (vizRafId) cancelAnimationFrame(vizRafId);
   micRunning = false;
   micBtn.textContent = "🎤 Start microphone";
   liveBanner.textContent = "⏸ Stopped.";
