@@ -154,8 +154,10 @@
   <div class="tab-panel active card" id="tab-live">
     <div class="row">
       <button id="micBtn" disabled>🎤 Start microphone</button>
+      <button class="secondary" id="baselineBtn" disabled>📌 Set healthy baseline</button>
       <span class="stats" id="liveStats">Session stats — inferences: 0 · alerts: 0 · elapsed: 0s</span>
     </div>
+    <div class="stats" id="baselineStat">No healthy baseline set — sound-event alerts only.</div>
     <div class="banner" id="liveBanner">⏳ Waiting for audio…</div>
     <div class="viz-row">
       <div class="viz-col">
@@ -176,8 +178,8 @@
     </div>
     <div class="log-scroll">
       <table>
-        <thead><tr><th>Time</th><th>Top label</th><th>Confidence</th><th>Alert</th></tr></thead>
-        <tbody id="logBody"><tr class="empty-state"><td colspan="4">No detections yet — click Start microphone above.</td></tr></tbody>
+        <thead><tr><th>Time</th><th>Top label</th><th>Confidence</th><th>Deviation</th><th>Alert</th></tr></thead>
+        <tbody id="logBody"><tr class="empty-state"><td colspan="5">No detections yet — click Start microphone above.</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -205,6 +207,13 @@
       <input type="text" id="alertLabels"
         value="Alarm, Siren, Smoke detector, Fire alarm, Explosion, Glass, Buzzer" />
     </div>
+    <div class="setting-group">
+      <label for="devThreshold">Baseline deviation alert threshold: <span class="setting-value" id="devThresholdVal">30%</span></label>
+      <p class="setting-help">After clicking "Set healthy baseline" on the Live tab, an alert also fires if the
+        live spectrum drifts this far from the saved baseline shape — independent of the AI labels. Useful for
+        catching abnormal sounds the model doesn't have a specific category for.</p>
+      <input type="range" id="devThreshold" min="5" max="80" step="1" value="30" style="width: 100%; max-width: 320px" />
+    </div>
   </div>
 
   <div class="tab-panel card" id="tab-how">
@@ -227,6 +236,11 @@
       <li>The <strong>live spectrum</strong> and <strong>spectrogram</strong> panels are a direct read of
         the microphone signal (via a Web Audio <code>AnalyserNode</code>) independent of the AI model —
         useful for visually spotting tonal shifts, rattles, or sudden spikes at a glance.</li>
+      <li><strong>Set healthy baseline</strong> (Live tab) captures the current spectral "fingerprint" while
+        the machine runs normally. Afterward, every cycle computes a <strong>baseline deviation %</strong> —
+        a simple, unsupervised anomaly score independent of the AI labels — and can trigger its own alert
+        (threshold in Settings). This is how the app can flag "something sounds different" even for
+        sounds AudioSet has no specific category for (e.g. a developing mechanical fault).</li>
     </ul>
     <h3>Limitations</h3>
     <ul>
@@ -237,6 +251,9 @@
         first load and first inference can take tens of seconds.</li>
       <li>Browser microphones are consumer-grade and band-limited (~20 kHz) — the same limitation as the
         DSP-only reference project this repo also contains.</li>
+      <li>The baseline deviation score is a simple spectral-shape distance, not a trained anomaly model —
+        it's sensitive to background noise changes and microphone position, so re-capture the baseline if
+        you move the mic or the environment changes significantly.</li>
     </ul>
   </div>
 
@@ -266,6 +283,10 @@ const clearBtn = document.getElementById("clearBtn");
 const thresholdEl = document.getElementById("threshold");
 const thresholdVal = document.getElementById("thresholdVal");
 const alertLabelsEl = document.getElementById("alertLabels");
+const baselineBtn = document.getElementById("baselineBtn");
+const baselineStat = document.getElementById("baselineStat");
+const devThresholdEl = document.getElementById("devThreshold");
+const devThresholdVal = document.getElementById("devThresholdVal");
 
 // ---- Tabs ----
 document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -279,6 +300,10 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
 
 thresholdEl.addEventListener("input", () => {
   thresholdVal.textContent = `${Math.round(thresholdEl.value * 100)}%`;
+});
+
+devThresholdEl.addEventListener("input", () => {
+  devThresholdVal.textContent = `${devThresholdEl.value}%`;
 });
 
 // ---- State ----
@@ -307,6 +332,10 @@ function getThreshold() {
   return parseFloat(thresholdEl.value);
 }
 
+function getDevThreshold() {
+  return parseFloat(devThresholdEl.value);
+}
+
 function checkAlert(results, threshold, alertLabels) {
   return results.some(
     (r) => r.score >= threshold && alertLabels.some((a) => r.label.toLowerCase().includes(a.toLowerCase()))
@@ -326,14 +355,15 @@ function renderBars(container, results) {
   });
 }
 
-function addLogRow(ts, label, score, isAlert) {
-  log.unshift([ts, label, score.toFixed(2), isAlert ? "YES" : ""]);
+function addLogRow(ts, label, score, devPct, isAlert) {
+  const devText = devPct === null ? "\u2014" : `${devPct.toFixed(0)}%`;
+  log.unshift([ts, label, score.toFixed(2), devText, isAlert ? "YES" : ""]);
   log = log.slice(0, MAX_LOG_ROWS);
   const emptyRow = logBody.querySelector(".empty-state");
   if (emptyRow) emptyRow.remove();
   const tr = document.createElement("tr");
   if (isAlert) tr.className = "alert-row";
-  tr.innerHTML = `<td>${ts}</td><td>${label}</td><td>${score.toFixed(2)}</td><td>${isAlert ? "YES" : ""}</td>`;
+  tr.innerHTML = `<td>${ts}</td><td>${label}</td><td>${score.toFixed(2)}</td><td>${devText}</td><td>${isAlert ? "YES" : ""}</td>`;
   logBody.prepend(tr);
   while (logBody.rows.length > MAX_LOG_ROWS) logBody.deleteRow(-1);
 }
@@ -378,7 +408,11 @@ function resampleLinear(input, fromRate, toRate) {
 const VIZ_FMIN = 40;   // Hz, low end of the displayed range
 const VIZ_FMAX = 12000; // Hz, high end of the displayed range (covers audible machine sounds)
 const VIZ_TICKS = [50, 100, 200, 500, 1000, 2000, 5000, 10000]; // Hz, axis reference lines
+const BASELINE_BAR_COUNT = 96; // resolution of the spectral "fingerprint" used for baseline comparison
 let waterfallAxisW = 0; // px reserved on the left of the spectrogram for frequency labels
+
+let healthyBaseline = null;   // Float32Array (0-1 normalized) captured spectral shape, or null
+let currentDevPct = null;     // latest % deviation from the baseline, or null if no baseline set
 
 function heatColor(value) {
   // value 0-255 -> dark blue (quiet) through purple/red to yellow (loud)
@@ -422,6 +456,27 @@ function computeCentroidHz(freqData, sampleRate) {
   return den > 0 ? num / den : 0;
 }
 
+// Samples freqData into BASELINE_BAR_COUNT log-spaced buckets, normalized to 0-1.
+// Used both for rendering the live spectrum and for baseline/anomaly comparison, so the
+// two stay in sync.
+function sampleLogBars(freqData, sampleRate, barCount) {
+  const bars = new Float32Array(barCount);
+  for (let i = 0; i < barCount; i++) {
+    const freq = logFreqAt(i / (barCount - 1));
+    const bin = freqToBin(freq, sampleRate, freqData.length);
+    bars[i] = freqData[bin] / 255;
+  }
+  return bars;
+}
+
+// Mean absolute difference between the current spectral shape and the saved healthy
+// baseline, expressed as a 0-100 percentage -- a simple, unsupervised anomaly score.
+function computeDeviationPct(bars, baseline) {
+  let sum = 0;
+  for (let i = 0; i < bars.length; i++) sum += Math.abs(bars[i] - baseline[i]);
+  return (sum / bars.length) * 100;
+}
+
 function drawSpectrumBars(freqData, sampleRate) {
   const ctx = specBarsCanvas.getContext("2d");
   const w = specBarsCanvas.width, h = specBarsCanvas.height;
@@ -431,15 +486,26 @@ function drawSpectrumBars(freqData, sampleRate) {
   ctx.fillStyle = "#10121a";
   ctx.fillRect(0, 0, w, h);
 
-  const barCount = 96;
+  const barCount = BASELINE_BAR_COUNT;
+  const bars = sampleLogBars(freqData, sampleRate, barCount);
   const barWidth = w / barCount;
   for (let i = 0; i < barCount; i++) {
-    const freq = logFreqAt(i / (barCount - 1));
-    const bin = freqToBin(freq, sampleRate, freqData.length);
-    const value = freqData[bin];
-    const barHeight = (value / 255) * plotH;
+    const value = bars[i] * 255;
+    const barHeight = bars[i] * plotH;
     ctx.fillStyle = heatColor(value);
     ctx.fillRect(i * barWidth, plotH - barHeight, Math.max(1, barWidth - 1), barHeight);
+  }
+
+  // If a healthy baseline is set, draw it as an outline overlay for visual comparison
+  if (healthyBaseline) {
+    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    ctx.beginPath();
+    for (let i = 0; i < barCount; i++) {
+      const x = i * barWidth + barWidth / 2;
+      const y = plotH - healthyBaseline[i] * plotH;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
   }
 
   // Frequency axis: gridlines + labels
@@ -530,6 +596,13 @@ function vizLoop() {
   analyserNode.getByteFrequencyData(freqData);
   drawSpectrumBars(freqData, audioCtx.sampleRate);
   drawWaterfallColumn(freqData, audioCtx.sampleRate);
+
+  if (healthyBaseline) {
+    const bars = sampleLogBars(freqData, audioCtx.sampleRate, BASELINE_BAR_COUNT);
+    currentDevPct = computeDeviationPct(bars, healthyBaseline);
+    baselineStat.textContent = `Baseline deviation: ${currentDevPct.toFixed(0)}%`;
+  }
+
   vizRafId = requestAnimationFrame(vizLoop);
 }
 
@@ -572,13 +645,17 @@ function classify(audio16k) {
   });
 }
 
-function updateBanner(bannerEl, isAlert, topLabel, topScore) {
-  if (isAlert) {
+function updateBanner(bannerEl, isLabelAlert, isDevAlert, topLabel, topScore, devPct) {
+  if (isDevAlert) {
+    bannerEl.className = "banner alert";
+    bannerEl.textContent = `🚨 ALERT — sound has drifted ${devPct.toFixed(0)}% from the healthy baseline (top sound: ${topLabel})`;
+  } else if (isLabelAlert) {
     bannerEl.className = "banner alert";
     bannerEl.textContent = `🚨 ALERT — ${topLabel} (${Math.round(topScore * 100)}% confidence)`;
   } else {
     bannerEl.className = "banner ok";
-    bannerEl.textContent = `✅ Monitoring — top sound: ${topLabel} (${Math.round(topScore * 100)}% confidence)`;
+    const devText = devPct === null ? "" : ` · baseline deviation ${devPct.toFixed(0)}%`;
+    bannerEl.textContent = `✅ Monitoring — top sound: ${topLabel} (${Math.round(topScore * 100)}% confidence)${devText}`;
   }
 }
 
@@ -621,13 +698,14 @@ async function startMic() {
       inferCount++;
       const threshold = getThreshold();
       const alertLabels = getAlertLabels();
-      const isAlert = checkAlert(results, threshold, alertLabels);
-      if (isAlert) alertsCount++;
+      const isLabelAlert = checkAlert(results, threshold, alertLabels);
+      const isDevAlert = healthyBaseline !== null && currentDevPct !== null && currentDevPct >= getDevThreshold();
+      if (isLabelAlert || isDevAlert) alertsCount++;
 
       const top = results[0];
-      updateBanner(liveBanner, isAlert, top.label, top.score);
+      updateBanner(liveBanner, isLabelAlert, isDevAlert, top.label, top.score, currentDevPct);
       renderBars(liveBars, results);
-      addLogRow(new Date().toLocaleTimeString(), top.label, top.score, isAlert);
+      addLogRow(new Date().toLocaleTimeString(), top.label, top.score, currentDevPct, isLabelAlert || isDevAlert);
       updateStats();
     }).catch((err) => console.error("Classification error:", err));
   };
@@ -641,6 +719,11 @@ async function startMic() {
   sizeCanvasToDisplay(specWaterfallCanvas);
   initWaterfallAxis();
   vizLoop();
+
+  // Warm-up guard: disable baseline capture for a couple of seconds so a startup click/pop
+  // doesn't get saved as the "healthy" reference.
+  baselineBtn.disabled = true;
+  setTimeout(() => { if (micRunning) baselineBtn.disabled = false; }, 2000);
 }
 
 function stopMic() {
@@ -652,11 +735,29 @@ function stopMic() {
   micRunning = false;
   micBtn.textContent = "🎤 Start microphone";
   liveBanner.textContent = "⏸ Stopped.";
+  baselineBtn.disabled = true;
 }
 
 micBtn.addEventListener("click", () => {
   if (micRunning) stopMic();
   else startMic();
+});
+
+baselineBtn.addEventListener("click", () => {
+  if (healthyBaseline) {
+    // Clear the baseline
+    healthyBaseline = null;
+    currentDevPct = null;
+    baselineBtn.textContent = "📌 Set healthy baseline";
+    baselineStat.textContent = "No healthy baseline set — sound-event alerts only.";
+    return;
+  }
+  if (!analyserNode || !audioCtx) return;
+  const freqData = new Uint8Array(analyserNode.frequencyBinCount);
+  analyserNode.getByteFrequencyData(freqData);
+  healthyBaseline = sampleLogBars(freqData, audioCtx.sampleRate, BASELINE_BAR_COUNT);
+  baselineBtn.textContent = "🗑 Clear baseline";
+  baselineStat.textContent = "Healthy baseline captured — comparing live sound against it (white outline on spectrum).";
 });
 
 // ---- Upload / Demo tab ----
@@ -671,7 +772,7 @@ async function classifyAudioBuffer(audioBuffer) {
   const alertLabels = getAlertLabels();
   const isAlert = checkAlert(results, threshold, alertLabels);
   const top = results[0];
-  updateBanner(uploadBanner, isAlert, top.label, top.score);
+  updateBanner(uploadBanner, isAlert, false, top.label, top.score, null);
   renderBars(uploadBars, results);
 }
 
@@ -775,7 +876,7 @@ exportBtn.addEventListener("click", () => {
     alert("No log entries yet — let the monitor run for a few seconds first.");
     return;
   }
-  const header = "time,top_label,confidence,alert\n";
+  const header = "time,top_label,confidence,baseline_deviation,alert\n";
   const rows = log.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
   const blob = new Blob([header + rows], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
@@ -790,7 +891,7 @@ clearBtn.addEventListener("click", () => {
   log = [];
   alertsCount = 0;
   inferCount = 0;
-  logBody.innerHTML = '<tr class="empty-state"><td colspan="4">No detections yet — click Start microphone above.</td></tr>';
+  logBody.innerHTML = '<tr class="empty-state"><td colspan="5">No detections yet — click Start microphone above.</td></tr>';
   updateStats();
 });
 

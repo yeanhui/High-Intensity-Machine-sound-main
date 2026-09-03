@@ -49,11 +49,12 @@ CDN on first load and is cached by the browser afterward.
 |---|---|
 | Live microphone tab | Streaming mic audio classified ~once per second, entirely client-side |
 | Live spectrum / spectrogram | Real-time frequency bars + scrolling waterfall spectrogram (direct signal read, independent of the AI model) |
+| Healthy baseline + deviation alert | Capture a spectral "fingerprint" while the machine runs normally; a live deviation % flags abnormal sounds even outside the AI model's labels (simple unsupervised anomaly detection) |
 | Top sound classes | Confidence bars (0–100%) per class, not just a single tag |
-| Alert banner | Turns red when a predicted label matches an "alert keyword" (Alarm, Siren, Explosion, …) above a confidence threshold |
-| Event log | Timestamped table of the top detection each cycle, newest first |
+| Alert banner | Turns red when a predicted label matches an "alert keyword" (Alarm, Siren, Explosion, …) above a confidence threshold, or when the baseline deviation crosses its own threshold |
+| Event log | Timestamped table of the top detection, confidence, and baseline deviation each cycle, newest first |
 | Export CSV | Downloads the full session log |
-| Settings | Alert confidence threshold slider + alert-keyword list |
+| Settings | Alert confidence threshold, alert-keyword list, and baseline deviation alert threshold |
 | Upload / Demo tab | Analyze an uploaded clip or the bundled demo sound — works with zero microphone access |
 
 ## Data / model used
