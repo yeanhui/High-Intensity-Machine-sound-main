@@ -251,6 +251,10 @@
       <li>The baseline deviation score is a simple spectral-shape distance, not a trained anomaly model —
         it's sensitive to background noise changes and microphone position, so re-capture the baseline if
         you move the mic or the environment changes significantly.</li>
+      <li>Requires network access to <code>cdn.jsdelivr.net</code> (the transformers.js library) and
+        <code>huggingface.co</code> (the model weights) on first load. Corporate/office networks that
+        whitelist only approved domains may block one or both, showing "Model failed to load" — this isn't
+        a bug in the app; ask your IT team to allow these domains, or try a different network.</li>
     </ul>
   </div>
 
@@ -649,7 +653,10 @@ worker.onmessage = (e) => {
       pending.get(id).reject(new Error(error));
       pending.delete(id);
     } else {
-      modelStatus.textContent = `❌ Model failed to load: ${error}. Try reloading the page.`;
+      const looksLikeNetworkBlock = /failed to fetch|networkerror|load failed/i.test(error || "");
+      modelStatus.textContent = looksLikeNetworkBlock
+        ? "❌ Model failed to load: could not reach huggingface.co / cdn.jsdelivr.net. If you're on a corporate/office network, its firewall may be blocking these domains — ask IT to allow them, or try a different network (e.g. mobile hotspot), then reload."
+        : `❌ Model failed to load: ${error}. Try reloading the page.`;
       console.error(error);
     }
   }

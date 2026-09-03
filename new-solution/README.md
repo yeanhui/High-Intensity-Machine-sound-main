@@ -94,3 +94,6 @@ it as a GitHub Actions secret named `HF_TOKEN`.
 - AudioSet's classes are general-purpose, not manufacturing-specific.
 - Model load + first inference can take tens of seconds on slower devices/connections.
 - Browser microphones are consumer-grade and band-limited (~20 kHz).
+- Needs network access to `cdn.jsdelivr.net` (transformers.js) and `huggingface.co` (model weights) on
+  first load. Corporate/office networks that only allow approved domains may block these, showing
+  "Model failed to load" — ask IT to allow them, or try a different network.
