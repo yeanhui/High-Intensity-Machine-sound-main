@@ -6,73 +6,123 @@
 <title>Factory Sound Event Classifier</title>
 <style>
   :root {
-    --ok: #1a7f37; --alert: #b91c1c; --bg: #f7f7f8; --card: #ffffff; --border: #e2e2e6;
+    --primary: #4f46e5; --primary-dark: #4338ca; --ok: #15803d; --alert: #b91c1c;
+    --bg: #f4f5f9; --card: #ffffff; --border: #e5e7ec; --text: #16181d; --muted: #6b7280;
+    --radius: 12px; --shadow: 0 1px 2px rgba(16,24,40,.04), 0 2px 8px rgba(16,24,40,.06);
   }
   * { box-sizing: border-box; }
   body {
-    font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-    margin: 0; padding: 24px; background: var(--bg); color: #1a1a1a;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0; padding: 32px 20px; background: var(--bg); color: var(--text); line-height: 1.5;
   }
-  .wrap { max-width: 860px; margin: 0 auto; }
-  h1 { font-size: 1.5rem; margin-bottom: 4px; }
-  .subtitle { color: #555; margin-bottom: 20px; }
+  .wrap { max-width: 980px; margin: 0 auto; }
+
+  .app-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .app-title { display: flex; align-items: center; gap: 12px; }
+  .app-icon {
+    font-size: 1.6rem; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, var(--primary), #7c6ff0); border-radius: 12px; box-shadow: var(--shadow);
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 2px; letter-spacing: -0.01em; }
+  .subtitle { color: var(--muted); font-size: 0.92rem; max-width: 560px; margin: 0; }
+
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px;
+    font-size: 0.85rem; font-weight: 600; background: #eef0f7; color: var(--muted); border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
   .card {
-    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-    padding: 18px; margin-bottom: 16px;
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow);
   }
-  .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid var(--border); }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
   .tab-btn {
-    padding: 10px 16px; border: none; border-bottom: 3px solid transparent; border-radius: 0;
-    background: none; margin-bottom: -2px; cursor: pointer; font-size: 0.95rem;
-    font-weight: 500; color: #666;
+    padding: 11px 18px; border: none; border-bottom: 2px solid transparent; border-radius: 0;
+    background: none; margin-bottom: -1px; cursor: pointer; font-size: 0.92rem;
+    font-weight: 500; color: var(--muted); transition: color .15s ease, border-color .15s ease;
   }
-  .tab-btn:hover { color: #1a1a1a; }
-  .tab-btn.active { color: #1a1a1a; font-weight: 700; border-bottom-color: #3b6fd6; background: none; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--primary); font-weight: 700; border-bottom-color: var(--primary); background: none; }
   .tab-panel { display: none; }
-  .tab-panel.active { display: block; }
+  .tab-panel.active { display: block; animation: fadeIn .15s ease; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
   button {
-    padding: 8px 14px; border-radius: 8px; border: 1px solid #1a1a1a; background: #1a1a1a;
-    color: #fff; cursor: pointer; font-size: 0.9rem;
+    padding: 9px 16px; border-radius: 9px; border: 1px solid var(--primary); background: var(--primary);
+    color: #fff; cursor: pointer; font-size: 0.9rem; font-weight: 600; transition: background .15s ease, transform .05s ease;
   }
-  button.secondary { background: #fff; color: #1a1a1a; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  button:hover:not(:disabled) { background: var(--primary-dark); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button.secondary { background: #fff; color: var(--text); border-color: var(--border); }
+  button.secondary:hover:not(:disabled) { background: #f6f7fb; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+  .section-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 700; margin: 0 0 10px; }
+
   .banner {
-    font-weight: 600; padding: 10px 14px; border-radius: 8px; margin: 12px 0;
-    background: #f1f1f3; color: #333;
+    font-weight: 600; padding: 12px 16px; border-radius: 10px; margin: 14px 0;
+    background: #f1f2f6; color: #333; border-left: 4px solid var(--border);
   }
-  .banner.ok { background: #e6f4ea; color: var(--ok); }
-  .banner.alert { background: #fdecea; color: var(--alert); }
-  .bar-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 0.88rem; }
+  .banner.ok { background: #ecfdf3; color: var(--ok); border-left-color: var(--ok); }
+  .banner.alert { background: #fef2f2; color: var(--alert); border-left-color: var(--alert); }
+
+  .bar-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: 0.87rem; }
   .bar-label { width: 220px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar-track { flex: 1; background: #eee; border-radius: 4px; height: 14px; overflow: hidden; }
-  .bar-fill { height: 100%; background: #3b6fd6; }
-  .bar-pct { width: 44px; text-align: right; color: #555; }
+  .bar-track { flex: 1; background: #eef0f5; border-radius: 6px; height: 12px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--primary), #7c6ff0); transition: width .3s ease; }
+  .bar-pct { width: 46px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
   table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
-  th { color: #555; font-weight: 600; }
+  thead th { position: sticky; top: 0; background: var(--card); }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: .03em; }
+  tbody tr:hover td { background: #fafbfd; }
   tr.alert-row td { color: var(--alert); font-weight: 600; }
-  .log-scroll { max-height: 260px; overflow-y: auto; }
-  select, input[type=range] { font-size: 0.9rem; }
-  .stats { color: #555; font-size: 0.9rem; }
+  .log-scroll { max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; }
+  .log-scroll table { margin: 0; }
+
+  select, input[type=range], input[type=text] {
+    font-size: 0.9rem; font-family: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+  }
+  input[type=range] { padding: 0; }
+  .stats { color: var(--muted); font-size: 0.87rem; }
   details summary { cursor: pointer; font-weight: 600; }
-  .status { color: #555; font-size: 0.9rem; margin: 6px 0; }
-  audio { width: 100%; margin-top: 8px; }
-  .viz-row { display: flex; gap: 14px; flex-wrap: wrap; margin: 12px 0; }
+  audio { width: 100%; margin-top: 10px; border-radius: 8px; }
+
+  .viz-row { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0; }
   .viz-col { flex: 1; min-width: 260px; }
-  .viz-label { font-size: 0.8rem; color: #555; margin-bottom: 4px; font-weight: 600; }
-  .viz-col canvas { width: 100%; height: 200px; background: #10121a; border-radius: 6px; display: block; }
+  .viz-label { font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+  .viz-col canvas {
+    width: 100%; height: 200px; background: #0d0f17; border-radius: 10px; display: block;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+  }
+
+  h3 { font-size: 1.02rem; margin: 0 0 10px; }
+  .tab-panel ul { padding-left: 20px; margin: 0 0 18px; }
+  .tab-panel li { margin-bottom: 8px; color: #333; }
+  .tab-panel a { color: var(--primary); }
+
+  footer { text-align: center; color: var(--muted); font-size: 0.8rem; margin-top: 28px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🏭 Factory Sound Event Classifier</h1>
-  <p class="subtitle">
-    Live microphone → in-browser AI audio classification (AudioSet, 527 classes) → alerts + event log.
-    No microphone or access blocked? Use the <strong>Upload / Demo</strong> tab below.
-  </p>
-
-  <div class="card status" id="modelStatus">⏳ Loading model in your browser (first load only, ~30&ndash;60s)…</div>
+  <div class="app-header">
+    <div class="app-title">
+      <div class="app-icon">🏭</div>
+      <div>
+        <h1>Factory Sound Event Classifier</h1>
+        <p class="subtitle">
+          Live microphone → in-browser AI audio classification (AudioSet, 527 classes) → alerts + event log.
+          No microphone or access blocked? Use the <strong>Upload / Demo</strong> tab below.
+        </p>
+      </div>
+    </div>
+    <div class="status-pill" id="modelStatus">⏳ Loading model in your browser (first load only, ~30&ndash;60s)…</div>
+  </div>
 
   <div class="tabs">
     <button class="tab-btn active" data-tab="live">Live microphone</button>
@@ -169,6 +219,8 @@
         DSP-only reference project this repo also contains.</li>
     </ul>
   </div>
+
+  <footer>Runs entirely in your browser — no audio is uploaded or stored anywhere.</footer>
 </div>
 
 <script type="module">
