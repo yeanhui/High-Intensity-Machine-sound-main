@@ -708,6 +708,7 @@ async function startMic() {
   source.connect(analyserNode);
 
   processorNode.onaudioprocess = (e) => {
+    if (!micRunning) return; // guard against a stray callback firing after Stop was clicked
     const chunk = e.inputBuffer.getChannelData(0);
     const chunk16k = resampleLinear(chunk, audioCtx.sampleRate, TARGET_SR);
 
@@ -723,6 +724,7 @@ async function startMic() {
 
     const bufferSnapshot = rollingBuffer.slice();
     classify(bufferSnapshot).then((results) => {
+      if (!micRunning) return; // mic was stopped while this classification was in flight
       inferCount++;
       const threshold = getThreshold();
       const alertLabels = getAlertLabels();
@@ -748,11 +750,17 @@ async function startMic() {
 }
 
 function stopMic() {
+  micRunning = false; // set first so any in-flight/queued callback sees this immediately
+  if (processorNode) processorNode.onaudioprocess = null;
   if (processorNode) processorNode.disconnect();
   if (analyserNode) analyserNode.disconnect();
   if (micStream) micStream.getTracks().forEach((t) => t.stop());
   if (audioCtx) audioCtx.close();
-  micRunning = false;
+  processorNode = null;
+  analyserNode = null;
+  audioCtx = null;
+  micStream = null;
+  rollingBuffer = new Float32Array(0);
   micBtn.textContent = "🎤 Start microphone";
   liveBanner.textContent = "⏸ Stopped.";
 }
