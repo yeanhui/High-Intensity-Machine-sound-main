@@ -20,12 +20,14 @@
     background: var(--card); border: 1px solid var(--border); border-radius: 10px;
     padding: 18px; margin-bottom: 16px;
   }
-  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid var(--border); }
   .tab-btn {
-    padding: 8px 16px; border: 1px solid var(--border); background: #fff; border-radius: 8px;
-    cursor: pointer; font-size: 0.95rem;
+    padding: 10px 16px; border: none; border-bottom: 3px solid transparent; border-radius: 0;
+    background: none; margin-bottom: -2px; cursor: pointer; font-size: 0.95rem;
+    font-weight: 500; color: #666;
   }
-  .tab-btn.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  .tab-btn:hover { color: #1a1a1a; }
+  .tab-btn.active { color: #1a1a1a; font-weight: 700; border-bottom-color: #3b6fd6; background: none; }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
   button {
