@@ -153,10 +153,6 @@
 </div>
 
 <script type="module">
-import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
-
-env.allowLocalModels = false;
-
 const MODEL_ID = "Xenova/ast-finetuned-audioset-10-10-0.4593";
 const TARGET_SR = 16000;
 const WINDOW_SECONDS = 2.0;
@@ -195,7 +191,6 @@ thresholdEl.addEventListener("input", () => {
 });
 
 // ---- State ----
-let classifier = null;
 let log = [];
 let alertsCount = 0;
 let inferCount = 0;
@@ -278,25 +273,43 @@ function resampleLinear(input, fromRate, toRate) {
   return output;
 }
 
-// ---- Model loading ----
-async function loadModel() {
-  try {
-    classifier = await pipeline("audio-classification", MODEL_ID);
+// ---- Model loading (runs in a Web Worker so the UI thread stays responsive) ----
+const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+let reqId = 0;
+const pending = new Map();
+
+worker.onmessage = (e) => {
+  const { type, id, results, error } = e.data;
+  if (type === "ready") {
     modelStatus.textContent = "✅ Model loaded — ready to classify.";
     micBtn.disabled = false;
     demoBtn.disabled = false;
     fileInput.disabled = false;
-  } catch (err) {
-    modelStatus.textContent = `❌ Model failed to load: ${err.message}. Try reloading the page.`;
-    console.error(err);
+  } else if (type === "result") {
+    if (pending.has(id)) {
+      pending.get(id).resolve(results);
+      pending.delete(id);
+    }
+  } else if (type === "error") {
+    if (id !== undefined && pending.has(id)) {
+      pending.get(id).reject(new Error(error));
+      pending.delete(id);
+    } else {
+      modelStatus.textContent = `❌ Model failed to load: ${error}. Try reloading the page.`;
+      console.error(error);
+    }
   }
-}
-loadModel();
+};
 
-// ---- Classification helper ----
-async function classify(audio16k) {
-  const results = await classifier(audio16k, { topk: 5 });
-  return results;
+worker.postMessage({ type: "load" });
+
+// ---- Classification helper (delegates the heavy work to the worker) ----
+function classify(audio16k) {
+  const id = ++reqId;
+  return new Promise((resolve, reject) => {
+    pending.set(id, { resolve, reject });
+    worker.postMessage({ type: "classify", id, audio: audio16k }, [audio16k.buffer]);
+  });
 }
 
 function updateBanner(bannerEl, isAlert, topLabel, topScore) {

@@ -35,7 +35,7 @@ jobs:
 
       - name: Check required files exist
         run: |
-          for f in index.html README.md; do
+          for f in index.html worker.js README.md; do
             [ -f "$f" ] || { echo "::error::Missing required file: $f"; exit 1; }
           done
           echo "All required files present."
